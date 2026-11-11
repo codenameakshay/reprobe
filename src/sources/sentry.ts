@@ -88,12 +88,12 @@ export async function gatherSentry(opts: {
   const auth = await sentryAuthState(runner);
   if (auth.state !== 'ok') return { status: auth, evidence: [] };
   const { org: ORG, projects: PROJECTS, url } = config.sources.sentry!;
+  const baseUrl = url ? `${url.replace(/\/+$/, '')}/organizations/${encodeURIComponent(ORG)}` : `https://${ORG}.sentry.io`;
 
   // Issues active around the incident, not whatever is unresolved today.
   const cutoff = Date.parse(opts.window.from) - DAY_MS;
-  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 19);
-  const active = `firstSeen:<=${iso(Date.parse(opts.window.to))} lastSeen:>=${iso(cutoff)}`;
-  const query = opts.issue ? opts.issue : opts.userId ? `user.id:${opts.userId} ${active}` : active;
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const query = opts.issue || `${opts.userId ? `user.id:${opts.userId} ` : ''}firstSeen:<=${iso(Date.parse(opts.window.to))} lastSeen:>=${iso(cutoff)}`;
   const evidence: Evidence[] = [];
   const failures: string[] = [];
   let successfulProjects = 0;
@@ -112,16 +112,17 @@ export async function gatherSentry(opts: {
     for (const row of parseIssueTable(r.stdout, project)) {
       const ms = parseLastSeen(row.lastSeen);
       if (!opts.issue && (ms === null || ms < cutoff)) continue;
-      // Numeric issue ids look like phone numbers to redaction, so ids and links use the short id.
-      const ref = row.shortId || row.id;
+      // Prefix fallback ids so redaction cannot mistake them for phone numbers.
+      const ref = row.shortId || `issue-${row.id}`;
       evidence.push({
         id: `sentry:${project}:${ref}`,
         source: 'sentry',
         at: ms === null ? null : new Date(ms).toISOString(),
         kind: 'sentry.issue',
-        summary: `${row.shortId} ${row.title} (${row.status})`,
+        summary: `${ref} ${row.title} (${row.status})`,
         data: row,
-        link: `${url ? url.replace(/\/+$/, '') : `https://${ORG}.sentry.io`}/issues/?query=${encodeURIComponent(ref)}`,
+        // A numeric id is not a short-id search, and a numeric URL would be redacted again.
+        ...(row.shortId ? { link: `${baseUrl}/issues/?query=${encodeURIComponent(row.shortId)}` } : {}),
       });
     }
   }
