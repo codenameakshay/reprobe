@@ -3,100 +3,247 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>reprobe: prove the bug, not just guess it</title>
-<meta name="description" content="Turn a bug complaint into cited evidence, a root cause, and a test that fails on the deployed commit. Your coding agent investigates; reprobe keeps production read-only. Free and open source.">
+<title>reprobe: prove the bug, don't just guess it</title>
+<meta name="description" content="Turn a bug complaint into cited evidence, a root cause, and a test that fails on the deployed commit. Your coding agent investigates; reprobe reads production read-only. Free and MIT licensed.">
+<meta property="og:title" content="reprobe: prove the bug, don't just guess it">
+<meta property="og:description" content="Evidence gathered read-only, a root cause that cites it, and a replay test that fails on the deployed commit and passes on the fix.">
+<meta property="og:type" content="website">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23FFE15A'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11' stroke='%23172033' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #fbfaf8; --surface: #ffffff; --ink: #16181d; --muted: #5d6270; --line: #e7e4df;
-  --accent: #3b5bdb; --fail: #c92a2a; --fail-bg: #fff0f0; --pass: #2b8a3e; --pass-bg: #ebfbee;
-  --code-bg: #16181d; --code-ink: #e9ecef; --code-muted: #8b92a1;
+  --paper: #f3f5f8; --surface: #ffffff; --ink: #172033; --muted: #566078; --rule: #d8dde6;
+  --hl: #ffe15a; --hl-ink: #172033;
+  --fail: #c62f2f; --fail-soft: #fbe7e5; --pass: #16804a; --pass-soft: #e1f4e8;
+  --code-bg: #172033; --code-ink: #e7ebf3; --code-muted: #8d98ae;
+  --ring: 0 0 0 1px rgb(23 32 51 / .07);
+  --lift: 0 1px 2px rgb(23 32 51 / .06), 0 12px 32px -10px rgb(23 32 51 / .18);
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1115; --surface: #161920; --ink: #eceef2; --muted: #9aa1b1; --line: #262a33;
-    --accent: #7c95ff; --fail: #ff8787; --fail-bg: #2a1416; --pass: #69db7c; --pass-bg: #12261a;
-    --code-bg: #0b0c10; --code-ink: #e9ecef; --code-muted: #7d8494;
+    --paper: #0e1626; --surface: #152036; --ink: #e7ebf3; --muted: #97a2b8; --rule: #26334d;
+    --hl: #f7d84a; --hl-ink: #172033;
+    --fail: #ff7d7d; --fail-soft: #3a1c26; --pass: #55d792; --pass-soft: #12322a;
+    --code-bg: #091020; --code-ink: #e7ebf3; --code-muted: #7f8aa1;
+    --ring: 0 0 0 1px rgb(255 255 255 / .07);
+    --lift: 0 1px 2px rgb(0 0 0 / .3), 0 16px 40px -12px rgb(0 0 0 / .55);
   }
 }
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-a { color: var(--accent); text-underline-offset: 3px; }
-.wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
-nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
-.logo { font: 600 18px/1 "JetBrains Mono", monospace; color: var(--ink); text-decoration: none; letter-spacing: -0.01em; }
-.logo span { color: var(--accent); }
-nav .links { display: flex; gap: 22px; font-size: 15px; }
-nav .links a { color: var(--muted); text-decoration: none; }
-nav .links a:hover { color: var(--ink); }
-.hero { padding: 72px 0 56px; }
-h1 { font-size: clamp(36px, 6vw, 60px); line-height: 1.05; letter-spacing: -0.035em; margin: 0 0 20px; max-width: 14ch; font-weight: 700; text-wrap: balance; }
-.lede { font-size: clamp(17px, 2vw, 20px); color: var(--muted); max-width: 60ch; margin: 0 0 32px; text-wrap: pretty; }
-.cmd { display: inline-flex; align-items: center; gap: 14px; background: var(--code-bg); color: var(--code-ink); font: 15px/1 "JetBrains Mono", monospace; padding: 16px 18px; border-radius: 10px; max-width: 100%; overflow-x: auto; }
-.cmd .p { color: var(--code-muted); user-select: none; }
-.cmd button { all: unset; cursor: pointer; color: var(--code-muted); font: 500 13px Inter, sans-serif; padding: 4px 8px; border-radius: 6px; border: 1px solid #ffffff22; }
-.cmd button:hover { color: var(--code-ink); }
-.cmd button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.sub { margin-top: 14px; font-size: 14px; color: var(--muted); }
-section { padding: 56px 0; border-top: 1px solid var(--line); }
-h2 { font-size: clamp(26px, 3.4vw, 34px); letter-spacing: -0.02em; line-height: 1.15; margin: 0 0 12px; }
-.kicker { font: 500 13px/1 "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 14px; }
-.intro { color: var(--muted); max-width: 62ch; margin: 0 0 32px; }
-.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
-.card .n { font: 500 13px "JetBrains Mono", monospace; color: var(--muted); }
-.card h3 { margin: 6px 0 8px; font-size: 18px; letter-spacing: -0.01em; }
-.card p { margin: 0; color: var(--muted); font-size: 15px; }
-pre { margin: 0; background: var(--code-bg); color: var(--code-ink); font: 13.5px/1.65 "JetBrains Mono", monospace; padding: 20px 22px; border-radius: 12px; overflow-x: auto; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 var(--sans); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+a { color: inherit; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+p { margin: 0; }
+h1, h2 { font-family: var(--cond); font-weight: 600; text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(30px, 4.2vw, 44px); line-height: 1.04; letter-spacing: -.012em; max-width: 22ch; }
+h3 { font-size: 17px; line-height: 1.35; margin: 0; font-weight: 600; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.intro { color: var(--muted); max-width: 62ch; margin-top: 16px; text-wrap: pretty; }
+
+/* nav */
+nav { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+.logo { font: 500 18px/1 var(--mono); text-decoration: none; letter-spacing: -.02em; display: inline-flex; align-items: center; gap: 10px; min-height: 44px; }
+.logo svg { flex: none; }
+nav .links { display: flex; gap: 4px; font-size: 15px; }
+nav .links a { color: var(--muted); text-decoration: none; padding: 10px 12px; border-radius: 8px; }
+@media (hover: hover) and (pointer: fine) { nav .links a:hover { color: var(--ink); } }
+
+/* hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 64px; align-items: center; padding: 48px 0 88px; }
+h1 { font-size: clamp(46px, 6.6vw, 78px); line-height: .98; letter-spacing: -.018em; }
+.lede { font-size: clamp(17px, 1.7vw, 19px); color: var(--muted); margin: 24px 0 32px; max-width: 46ch; text-wrap: pretty; }
+.lede q { color: var(--ink); }
+.cmd { display: inline-flex; align-items: center; gap: 4px; background: var(--code-bg); color: var(--code-ink); font: 15px/1 var(--mono); padding: 6px 6px 6px 18px; border-radius: 12px; max-width: 100%; }
+.cmd .p { color: var(--code-muted); user-select: none; margin-right: 10px; }
+.cmd code { font-size: 15px; white-space: nowrap; margin-right: 8px; }
+.copy { all: unset; position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 8px; color: var(--code-muted); cursor: pointer; transition: transform 120ms var(--ease-out), color 150ms ease; }
+.copy:active { transform: scale(.96); }
+@media (hover: hover) and (pointer: fine) { .copy:hover { color: var(--code-ink); background: rgb(255 255 255 / .06); } }
+.copy:focus-visible { outline: 2px solid var(--hl); outline-offset: 0; }
+.copy svg { grid-area: 1 / 1; transition: opacity 200ms cubic-bezier(.2, 0, 0, 1), transform 200ms cubic-bezier(.2, 0, 0, 1), filter 200ms cubic-bezier(.2, 0, 0, 1); }
+.copy .ok { opacity: 0; transform: scale(.25); filter: blur(4px); color: var(--hl); }
+.copy.done .ok { opacity: 1; transform: none; filter: none; }
+.copy.done .cp { opacity: 0; transform: scale(.25); filter: blur(4px); }
+.fine { margin-top: 16px; font-size: 14px; color: var(--muted); max-width: 46ch; }
+
+/* case file */
+.case { background: var(--surface); border-radius: 18px; box-shadow: var(--ring), var(--lift); padding: 8px; }
+.case-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 8px 8px 14px; font: 13px/1.3 var(--mono); color: var(--muted); }
+.case-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.again { all: unset; cursor: pointer; font: 500 13px/1 var(--sans); color: var(--ink); padding: 0 12px; height: 32px; display: inline-flex; align-items: center; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--rule); transition: transform 120ms var(--ease-out); flex: none; }
+.again:active { transform: scale(.96); }
+.again:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.case-body { background: var(--paper); border-radius: 10px; padding: 20px 20px 22px; display: grid; gap: 18px; }
+.blk > b { display: block; font: 500 13px/1 var(--sans); color: var(--muted); margin-bottom: 8px; }
+.complaint { font-size: 17px; }
+.ev { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.45; }
+.ev li { display: grid; grid-template-columns: 19ch 1fr; gap: 12px; align-items: baseline; }
+.ev .id { font: 12.5px/1.45 var(--mono); color: var(--muted); white-space: nowrap; }
+.claim { font-size: 15px; line-height: 1.55; }
+.cite { font: 12px/1 var(--mono); color: var(--hl-ink); position: relative; isolation: isolate; padding: 3px 5px; margin-left: 2px; white-space: nowrap; }
+.cite::before, .ev .hit::before { content: ""; position: absolute; inset: 0; background: var(--hl); border-radius: 4px; z-index: -1; transform-origin: left center; }
+.ev .hit { position: relative; isolation: isolate; color: var(--hl-ink); padding: 1px 4px; margin-left: -4px; }
+.runs { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.runs li { display: grid; grid-template-columns: 7ch 9ch auto 1fr; gap: 12px; align-items: center; font-size: 14px; }
+.runs .sha { font: 13px var(--mono); }
+.runs .what { color: var(--muted); font-size: 14px; }
+.runs .why { color: var(--muted); font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status { display: grid; }
+.status > * { grid-area: 1 / 1; }
+.pending { font: 12.5px var(--mono); color: var(--muted); opacity: 0; }
+.stamp { display: inline-block; font: 600 12.5px/1 var(--mono); letter-spacing: .04em; padding: 4px 7px; border-radius: 5px; border: 1.5px solid currentColor; }
+.stamp.fail { color: var(--fail); background: var(--fail-soft); }
+.stamp.pass { color: var(--pass); background: var(--pass-soft); }
+
+/* the one orchestrated moment: the case fills in once on load (and on "Replay") */
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes sweep { from { transform: scaleX(0); } }
+@keyframes show { 0%, 100% { opacity: 1; } }
+@keyframes hide { to { opacity: 0; } }
+@keyframes stamp { from { opacity: 0; transform: scale(.92); } }
+@media (prefers-reduced-motion: no-preference) {
+  .case.play .s { animation: rise 320ms var(--ease-out) var(--d) both; }
+  .case.play .cite::before, .case.play .ev .hit::before { animation: sweep 380ms var(--ease-out) var(--d) both; }
+  .case.play .pending { animation: show 1ms linear var(--d) both, hide 120ms ease-out var(--t) forwards; }
+  .case.play .status .stamp { animation: stamp 220ms var(--ease-out) var(--t) both; }
+  .case.play .runs .why { animation: rise 260ms var(--ease-out) calc(var(--t) + 60ms) both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .again { display: none; }
+  .copy svg { transition-property: opacity; }
+  .faq summary svg { transition: none; }
+}
+
+/* sections */
+section { padding: 96px 0; }
+section + section { border-top: 1px solid var(--rule); }
+.head { margin-bottom: 56px; }
+
+/* how it works: a sequence diagram with two lifelines */
+.lanes, .seq > li { display: grid; grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr); }
+.lanes { margin-bottom: 8px; }
+.lanes div { padding-bottom: 16px; }
+.lanes div:first-child { justify-self: end; width: 100%; max-width: 420px; }
+.lanes div:last-child { grid-column: 3; }
+.lanes b { display: block; font: 500 16px/1.3 var(--mono); }
+.lanes span { font-size: 14px; color: var(--muted); }
+.seq { list-style: none; margin: 0; padding: 0; position: relative; }
+.seq::before { content: ""; position: absolute; left: calc(50% - 1px); top: 0; bottom: 0; width: 2px; background: var(--rule); }
+.seq > li { padding: 0 0 40px; }
+.seq > li:last-child { padding-bottom: 0; }
+.seq .n { grid-column: 2; grid-row: 1; justify-self: center; position: relative; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font: 500 13px/1 var(--mono); background: var(--ink); color: var(--paper); font-variant-numeric: tabular-nums; }
+.seq .agent .n { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+.seq .body { grid-row: 1; grid-column: 1; max-width: 420px; justify-self: end; width: 100%; }
+.seq .agent .body { grid-column: 3; justify-self: start; }
+.seq .lane { display: none; font: 500 13px/1 var(--mono); color: var(--muted); margin-bottom: 6px; }
+.seq p { color: var(--muted); font-size: 15.5px; margin-top: 6px; text-wrap: pretty; }
+.seq code.line { display: block; margin-top: 12px; font-size: 13px; padding: 9px 12px; border-radius: 8px; background: var(--surface); box-shadow: var(--ring); overflow-x: auto; white-space: nowrap; }
+.start { margin-top: 72px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 40px; align-items: start; }
+.start p { color: var(--muted); margin-top: 8px; max-width: 34ch; }
+pre { margin: 0; background: var(--code-bg); color: var(--code-ink); font: 13.5px/1.75 var(--mono); padding: 20px 22px; border-radius: 14px; overflow-x: auto; }
 pre .c { color: var(--code-muted); }
-pre .k { color: #91a7ff; }
-pre .f { color: #ff8787; }
-pre .ok { color: #69db7c; }
-.timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; position: relative; margin-top: 8px; }
-.timeline::before { content: ""; position: absolute; left: 4%; right: 4%; top: 86px; height: 2px; background: var(--line); }
-.commit { text-align: center; padding: 0 8px; position: relative; }
-.verdict { display: inline-block; font: 600 14px "JetBrains Mono", monospace; padding: 8px 16px; border-radius: 8px; margin-bottom: 18px; }
-.verdict.fail { color: var(--fail); background: var(--fail-bg); }
-.verdict.pass { color: var(--pass); background: var(--pass-bg); }
-.dot { width: 22px; height: 22px; border-radius: 50%; margin: 0 auto 12px; border: 3px solid var(--bg); box-shadow: 0 0 0 2px var(--fail); background: var(--fail-bg); position: relative; }
-.dot.pass { box-shadow: 0 0 0 2px var(--pass); background: var(--pass-bg); }
-.commit b { display: block; font-size: 15px; }
-.commit small { color: var(--muted); font: 13px "JetBrains Mono", monospace; }
-.note { margin-top: 28px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; color: var(--muted); font-size: 15px; }
-.split { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
-ul.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
-ul.checks li { padding-left: 28px; position: relative; color: var(--muted); }
-ul.checks li::before { content: ""; position: absolute; left: 0; top: 8px; width: 12px; height: 7px; border-left: 2px solid var(--pass); border-bottom: 2px solid var(--pass); transform: rotate(-45deg); }
-ul.checks b { color: var(--ink); font-weight: 600; }
-.sources { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-.sources span { font: 13px "JetBrains Mono", monospace; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); }
-details { border-bottom: 1px solid var(--line); padding: 16px 0; }
-details summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
-details summary::after { content: "+"; color: var(--muted); font-weight: 400; }
-details[open] summary::after { content: "–"; }
-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
-details p { color: var(--muted); margin: 10px 0 0; max-width: 70ch; }
-footer { padding: 40px 0 56px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+/* proof: one replay across four commits */
+.rail { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.commit { position: relative; padding-right: 28px; }
+.commit::before { content: ""; position: absolute; left: 24px; right: 0; top: 11px; height: 2px; background: color-mix(in srgb, var(--fail) 45%, transparent); }
+.commit:nth-child(3)::before { background: linear-gradient(90deg, color-mix(in srgb, var(--fail) 45%, transparent), color-mix(in srgb, var(--pass) 55%, transparent)); }
+.commit:last-child::before { display: none; }
+.dot { width: 24px; height: 24px; border-radius: 50%; background: var(--paper); box-shadow: inset 0 0 0 2px var(--fail); position: relative; }
+.dot::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--fail); }
+.commit.ok .dot { box-shadow: inset 0 0 0 2px var(--pass); }
+.commit.ok .dot::after { background: var(--pass); }
+.commit .stamp { margin: 20px 0 14px; font-size: 13px; padding: 5px 9px; }
+.commit h3 { font-size: 18px; }
+.commit .sha { font: 13px/1.4 var(--mono); color: var(--muted); }
+.commit p { color: var(--muted); font-size: 15px; margin-top: 10px; max-width: 26ch; text-wrap: pretty; }
+.commit.key p { color: var(--ink); }
+.legend { margin: 56px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; border-top: 1px solid var(--rule); padding-top: 28px; }
+.legend div { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: baseline; }
+.legend dt .stamp { font-size: 12px; }
+.stamp.broken { color: var(--muted); background: transparent; border-style: dashed; }
+.legend dd { margin: 0; color: var(--muted); font-size: 15px; text-wrap: pretty; }
+
+/* safety */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 64px; align-items: start; }
+.layers { --pad: 14px; }
+/* nested layers: each outer radius = inner radius + padding */
+.layer { border-radius: var(--r); padding: var(--pad); box-shadow: var(--ring); }
+.layer > .t { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; align-items: baseline; padding: 2px 4px 12px; }
+.layer > .t b { font-size: 15px; font-weight: 600; }
+.layer > .t code { font-size: 12.5px; color: var(--muted); }
+.l1 { --r: 32px; background: var(--paper); }
+.l2 { --r: 18px; background: var(--surface); }
+.l3 { --r: 4px; background: var(--paper); }
+.query { font: 13px/1.5 var(--mono); background: var(--code-bg); color: var(--code-ink); padding: 12px 14px; overflow-x: auto; white-space: nowrap; }
+.layers .cap { color: var(--muted); font-size: 15px; margin-top: 18px; text-wrap: pretty; }
+.facts { margin: 72px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 64px; }
+.facts dt { font-weight: 600; }
+.facts dd { margin: 6px 0 0; color: var(--muted); font-size: 15.5px; text-wrap: pretty; max-width: 52ch; }
+
+/* faq */
+.faq details { border-bottom: 1px solid var(--rule); }
+.faq details:first-of-type { border-top: 1px solid var(--rule); }
+.faq summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 0; font-weight: 600; min-height: 44px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary svg { flex: none; color: var(--muted); transition: transform 200ms var(--ease-out); }
+.faq details[open] summary svg { transform: rotate(45deg); }
+.faq details p { color: var(--muted); padding: 0 0 20px; max-width: 64ch; margin-top: -4px; text-wrap: pretty; }
+
+footer { border-top: 1px solid var(--rule); padding: 32px 0 56px; display: flex; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; font-size: 15px; color: var(--muted); }
+footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 48px; padding: 32px 0 72px; }
+  .split, .start { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+}
 @media (max-width: 760px) {
   .wrap { padding: 0 16px; }
-  .steps, .split { grid-template-columns: 1fr; }
-  .timeline { grid-template-columns: 1fr 1fr; row-gap: 28px; }
-  .timeline::before { display: none; }
+  section { padding: 72px 0; }
+  .head { margin-bottom: 40px; }
   nav .links a:not(.gh) { display: none; }
-  .hero { padding: 40px 0 40px; }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .cmd button { transition: color .15s ease; }
+  .case-body { padding: 16px 14px 18px; }
+  .copy { width: 44px; height: 44px; }
+  .again { height: 40px; }
+  .ev li { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .runs li { grid-template-columns: 7ch auto minmax(0, 1fr); }
+  .runs .what { display: none; }
+  .lanes { display: none; }
+  .seq::before { left: 15px; }
+  .seq > li { grid-template-columns: 32px minmax(0, 1fr); column-gap: 16px; padding-bottom: 32px; }
+  .seq .n { grid-column: 1; }
+  .seq .body, .seq .agent .body { grid-column: 2; justify-self: start; max-width: none; }
+  .seq .lane { display: block; }
+  .seq code.line, .query { white-space: normal; overflow-wrap: anywhere; }
+  .rail { grid-template-columns: minmax(0, 1fr); }
+  .commit { padding: 0 0 32px 44px; }
+  .commit::before, .commit:nth-child(3)::before { left: 11px; right: auto; top: 24px; bottom: 0; width: 2px; height: auto; }
+  .commit:nth-child(3)::before { background: linear-gradient(180deg, color-mix(in srgb, var(--fail) 45%, transparent), color-mix(in srgb, var(--pass) 55%, transparent)); }
+  .commit .dot { position: absolute; left: 0; top: 0; }
+  .commit .stamp { margin: 0 0 10px; }
+  .commit p { max-width: none; }
+  .legend, .facts { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .layers { --pad: 10px; }
 }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <nav>
-    <a class="logo" href="#">re<span>probe</span></a>
+  <nav aria-label="Main">
+    <a class="logo" href="#">
+      <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--hl)"/><path d="M9 16.5l4.5 4.5L23 11" stroke="#172033" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      reprobe
+    </a>
     <div class="links">
       <a href="#how">How it works</a>
       <a href="#proof">Proof</a>
@@ -106,87 +253,161 @@ footer { padding: 40px 0 56px; color: var(--muted); font-size: 14px; border-top:
   </nav>
 
   <header class="hero">
-    <h1>Prove the bug, don't just guess it.</h1>
-    <p class="lede">A user says "I couldn't save, I tried three times." reprobe gathers what production saw, read-only. Your coding agent finds the cause, with every claim citing evidence, and writes a test that fails on the code you deployed.</p>
-    <div class="cmd" role="group" aria-label="Install command"><span class="p">$</span><code id="cmd">npx reprobe init</code><button type="button" id="copy">Copy</button></div>
-    <p class="sub">Free and MIT licensed. No server, no account, no hosted model. It runs on your machine with your agent.</p>
+    <div>
+      <h1>Prove the bug, don't just guess it.</h1>
+      <p class="lede">A user writes in: <q>I couldn't save, I tried three times.</q> reprobe gathers what production saw, read-only. Your coding agent finds the cause, cites evidence for every claim, and writes a test that fails on the code you deployed.</p>
+      <div class="cmd" role="group" aria-label="Install command">
+        <span class="p" aria-hidden="true">$</span><code id="cmd">npx reprobe init</code>
+        <button type="button" class="copy" id="copy" aria-label="Copy command">
+          <svg class="cp" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/></svg>
+          <svg class="ok" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        </button>
+        <span class="sr" id="copied" role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)"></span>
+      </div>
+      <p class="fine">Free and MIT licensed. No server, no account, no hosted model. It runs on your machine with Claude Code or Codex.</p>
+    </div>
+
+    <figure class="case play" id="case" style="margin:0" aria-label="Example case: a complaint turned into evidence, a cited root cause and replay verdicts">
+      <div class="case-head"><span>~/.reprobe/cases/app/2026-10-14-a71c3e</span><button type="button" class="again" id="again">Replay</button></div>
+      <div class="case-body">
+        <div class="blk s" style="--d:80ms"><b>Complaint</b><p class="complaint">“I couldn't save, I tried three times.”</p></div>
+        <div class="blk">
+          <b class="s" style="--d:300ms">Evidence</b>
+          <ul class="ev">
+            <li class="s" style="--d:380ms"><span class="id">query:3b7e10c9a2</span><span>Drafts saved by <span class="mono">u_7f2</span> since 09:00: 0 rows</span></li>
+            <li class="s" style="--d:460ms"><span class="id"><span class="hit" style="--d:1280ms">logs:…:9f04d2b6e1</span></span><span>POST /drafts 409, duplicate key, 3 times</span></li>
+            <li class="s" style="--d:540ms"><span class="id"><span class="hit" style="--d:1380ms">sentry:api:API-4K2</span></span><span>UniqueViolation on drafts_idem_key</span></li>
+          </ul>
+        </div>
+        <div class="blk s" style="--d:820ms"><b>Root cause</b>
+          <p class="claim">Every retry resends the first attempt's idempotency key. The first attempt never committed, so each retry is rejected as a duplicate. <span class="cite" style="--d:1120ms">logs:…9f04</span> <span class="cite" style="--d:1220ms">sentry:API-4K2</span></p>
+        </div>
+        <div class="blk">
+          <b class="s" style="--d:1560ms">Replay</b>
+          <ul class="runs">
+            <li class="s" style="--d:1640ms;--t:2080ms"><span class="sha">e4b1907</span><span class="what">deployed</span><span class="status"><span class="pending">running</span><span class="stamp fail">FAIL</span></span><span class="why">expected 1 draft, got 0</span></li>
+            <li class="s" style="--d:1760ms;--t:2460ms"><span class="sha">5d03c2a</span><span class="what">the fix</span><span class="status"><span class="pending">running</span><span class="stamp pass">PASS</span></span><span class="why"></span></li>
+          </ul>
+        </div>
+      </div>
+    </figure>
   </header>
+</div>
 
-  <section id="how">
-    <div class="kicker">How it works</div>
-    <h2>The CLI does the parts that must be exact. Your agent does the thinking.</h2>
-    <p class="intro">Like <code>npx t3 triage</code>, reprobe packages the facts and a playbook, then starts Claude Code or Codex in your repo. Gathering, access control, redaction, citation checks and replays at old commits stay deterministic.</p>
-    <div class="steps">
-      <div class="card"><div class="n">01 · gather</div><h3>Evidence, read-only</h3><p>Database rows, agent traces, server logs and Sentry issues for the user and the time window. Each item gets a stable id. Missing or expired sources are listed, never guessed around.</p></div>
-      <div class="card"><div class="n">02 · investigate</div><h3>Your agent, cited</h3><p>The agent reads the case, the code at the deployed commit, and digs further through reprobe's read-only tools. Its diagnosis drops any claim that cites no evidence.</p></div>
-      <div class="card"><div class="n">03 · prove</div><h3>A replay that fails today</h3><p>The agent writes the smallest test of the broken invariant. reprobe runs it in a detached worktree at each commit: FAIL on the deployed code, PASS on the fix.</p></div>
+<section id="how">
+  <div class="wrap">
+    <div class="head">
+      <h2>The CLI does the parts that must be exact. Your agent does the thinking.</h2>
+      <p class="intro">Like <code>npx t3 triage</code>, reprobe packages the facts and a playbook, then starts Claude Code or Codex in your repo. Gathering, read-only access, redaction, citation checks and replays at old commits are plain code, not a model's judgment.</p>
     </div>
-    <div style="margin-top:24px">
-<pre><span class="c">$</span> npx reprobe <span class="k">"users on build 155 can't see their groups"</span>
-<span class="c">reprobe: connecting to Postgres (read-only)</span>
-<span class="c">reprobe: reading logs</span>
-~/.reprobe/cases/api/2026-09-08-7d2e91/report.md
-top: [medium] Server lists 10 live groups the user cannot see: likely the app's local cache
-Starting Claude Code in ~/code/app.
 
-<span class="c">… the agent writes replay.json, then:</span>
-<span class="c">$</span> reprobe verify &lt;case&gt; 4f1c2a9e0b b72e05d1c3
-4f1c2a9e0b <span class="f">FAIL</span> Actual: Set:[]  Which: does not contain 'grp_8f3…'
-b72e05d1c3 <span class="ok">PASS</span>  replay passed</pre>
+    <div class="lanes" aria-hidden="true">
+      <div><b>reprobe</b><span>Deterministic, read-only</span></div>
+      <div><b>your agent</b><span>Claude Code or Codex, in your repo</span></div>
     </div>
-  </section>
+    <ol class="seq">
+      <li><span class="n">1</span><div class="body"><span class="lane">reprobe</span><h3>Gather the evidence</h3><p>Rows, agent traces, logs and Sentry issues for that user and time window, from Postgres, Langfuse, LangSmith, Sentry, Railway, any log CLI or log files. Each item gets a stable id. Missing sources are listed, not guessed around.</p><code class="line">npx reprobe "&lt;complaint&gt;" --since 6h</code></div></li>
+      <li class="agent"><span class="n">2</span><div class="body"><span class="lane">your agent</span><h3>Investigate</h3><p>Reads the case and the code at the deployed commit, then digs further through reprobe's read-only tools. Each answer becomes new evidence it can cite.</p><code class="line">reprobe query &lt;case&gt; "SELECT …"</code></div></li>
+      <li class="agent"><span class="n">3</span><div class="body"><span class="lane">your agent</span><h3>Write the replay</h3><p>The smallest test of the invariant the bug broke, in your own test framework, filled with the real shapes from the evidence.</p><code class="line">&lt;case&gt;/replay.json</code></div></li>
+      <li><span class="n">4</span><div class="body"><span class="lane">reprobe</span><h3>Run it at each commit</h3><p>Each run happens in a detached worktree. You want FAIL on the deployed commit and PASS on the fix.</p><code class="line">reprobe verify &lt;case&gt; &lt;deployed-sha&gt; &lt;fix-sha&gt;</code></div></li>
+      <li><span class="n">5</span><div class="body"><span class="lane">reprobe</span><h3>Check every claim</h3><p>The agent's diagnosis loses any claim that cites nothing, or cites an id that isn't in the evidence. What's left becomes the report.</p><code class="line">reprobe report &lt;case&gt;</code></div></li>
+    </ol>
 
-  <section id="proof">
-    <div class="kicker">Proof, not plausibility</div>
-    <h2>One test, run across your history.</h2>
-    <p class="intro">An explanation can sound right and be wrong. A test that fails on the commit users ran, and passes on the fix, can't. Here is a real incident: the first fix shipped and the bug stayed.</p>
-    <div class="timeline" role="list">
-      <div class="commit" role="listitem"><span class="verdict fail">FAIL</span><div class="dot"></div><b>Build 155</b><small>deployed</small></div>
-      <div class="commit" role="listitem"><span class="verdict fail">FAIL</span><div class="dot"></div><b>Before fix 1</b><small>parent</small></div>
-      <div class="commit" role="listitem"><span class="verdict fail">FAIL</span><div class="dot"></div><b>Fix 1</b><small>build 156</small></div>
-      <div class="commit" role="listitem"><span class="verdict pass">PASS</span><div class="dot pass"></div><b>Fix 2</b><small>the real fix</small></div>
+    <div class="start">
+      <div><h3>Your first case</h3><p>Run these in your repo. The config stores env var names, never secret values.</p></div>
+<pre>cd your-repo
+npx reprobe init     <span class="c"># finds your sources, writes .reprobe/config.json</span>
+npx reprobe doctor   <span class="c"># checks each source with a real read</span>
+npx reprobe "users can't save since this morning" --since 6h</pre>
     </div>
-    <p class="note">The replay still failed at the first fix, which is exactly why users on build 156 kept seeing the bug. A run that crashes before its assertion is marked BROKEN, so a crash can never pass for a reproduced bug.</p>
-  </section>
+  </div>
+</section>
 
-  <section id="safety">
+<section id="proof">
+  <div class="wrap">
+    <div class="head">
+      <h2>One test, run across your history.</h2>
+      <p class="intro">An explanation can sound right and still be wrong. A test that fails on the commit your users ran and passes on the fix settles it. This is a real incident with the names taken out: the first fix shipped, and the bug stayed.</p>
+    </div>
+    <ol class="rail">
+      <li class="commit"><div class="dot"></div><span class="stamp fail">FAIL</span><h3>Deployed</h3><span class="sha">e4b1907</span><p>The code users ran. The bug reproduces.</p></li>
+      <li class="commit"><div class="dot"></div><span class="stamp fail">FAIL</span><h3>Before fix 1</h3><span class="sha">c02f6d1</span><p>Still fails, as expected.</p></li>
+      <li class="commit key"><div class="dot"></div><span class="stamp fail">FAIL</span><h3>Fix 1, shipped</h3><span class="sha">7a9e33b</span><p>Still fails. This is why users on the next build kept seeing the bug.</p></li>
+      <li class="commit ok"><div class="dot"></div><span class="stamp pass">PASS</span><h3>Fix 2</h3><span class="sha">5d03c2a</span><p>Passes. The real fix.</p></li>
+    </ol>
+    <dl class="legend">
+      <div><dt><span class="stamp fail">FAIL</span></dt><dd>The test reached its assertion and the assertion failed. The bug reproduces.</dd></div>
+      <div><dt><span class="stamp pass">PASS</span></dt><dd>The test reached its assertion and it held.</dd></div>
+      <div><dt><span class="stamp broken">BROKEN</span></dt><dd>The test never reached its assertion. A crash can't pass for a reproduced bug.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section id="safety">
+  <div class="wrap">
     <div class="split">
       <div>
-        <div class="kicker">Safety</div>
-        <h2>Production stays read-only.</h2>
-        <p class="intro">reprobe reads the same production your users hit, and its database path can't change it. Everything else it runs is code you chose: your commands, your pack, your tests.</p>
-        <div class="sources"><span>postgres</span><span>langfuse</span><span>langsmith</span><span>sentry</span><span>railway</span><span>any log CLI</span><span>log files</span></div>
+        <h2>Every query is read-only, three times over.</h2>
+        <p class="intro">reprobe reads the same production your users hit. Its database path wraps each query in three read-only layers, and stops if the server doesn't confirm read-only mode.</p>
       </div>
-      <ul class="checks">
-        <li><b>Every query is checked three times.</b> A SELECT-only guard, a read-only session, and <code>BEGIN READ ONLY … ROLLBACK</code>. reprobe stops if the server doesn't confirm read-only. Pair it with a read-only role.</li>
-        <li><b>Replays stay out of your checkout.</b> They run in detached worktrees, as a known test runner, without a shell. Keep production credentials out of their environment, as you would for any test run.</li>
-        <li><b>Redacted by default.</b> Phones, emails, tokens and keys are removed before a case is written. It is pattern-based, so read a case before sharing it. Cases live outside your repo.</li>
-        <li><b>Nothing is posted.</b> No writes to Sentry, GitHub or users. The agent is told evidence is data, never instructions.</li>
-        <li><b>Your keys stay yours.</b> The config holds env var names or commands, not values.</li>
-      </ul>
+      <div class="layers">
+        <div class="layer l1">
+          <div class="t"><b>Read-only transaction</b><code>BEGIN READ ONLY … ROLLBACK</code></div>
+          <div class="layer l2">
+            <div class="t"><b>Read-only session</b><code>default_transaction_read_only=on</code></div>
+            <div class="layer l3">
+              <div class="t"><b>SELECT-only guard</b><code>anything else is refused</code></div>
+              <div class="query">SELECT id, created_at FROM drafts WHERE …</div>
+            </div>
+          </div>
+        </div>
+        <p class="cap">Give it a read-only database role as well. The guard can't tell whether a function in your schema has side effects.</p>
+      </div>
     </div>
-  </section>
+    <dl class="facts">
+      <div><dt>Replays stay out of your checkout</dt><dd>Each runs in a detached git worktree, as a known test runner, without a shell. Keep production credentials out of its environment, as you would for any test run.</dd></div>
+      <div><dt>Redaction is on, and pattern-based</dt><dd>Phones, emails, tokens, keys and signed URLs are removed before a case is written. An opaque token can slip through, so read a case before you share it.</dd></div>
+      <div><dt>Nothing is posted</dt><dd>No writes to Sentry, GitHub, Langfuse or your users. The agent is told to treat evidence as data, never as instructions.</dd></div>
+      <div><dt>Your code is trusted code</dt><dd>Configured commands, your pack and replay tests run as you, with your permissions, like your test suite. Headless mode limits which tools the agent can call; it is not an OS sandbox.</dd></div>
+    </dl>
+  </div>
+</section>
 
-  <section id="faq">
-    <div class="kicker">Questions</div>
+<section id="faq" class="faq">
+  <div class="wrap split">
     <h2>Before you try it</h2>
-    <details><summary>What does it cost?</summary><p>Nothing. reprobe is MIT licensed and has no server. The investigation runs on the Claude Code or Codex you already use, so the only cost is your own agent's usage.</p></details>
-    <details><summary>Does my data leave my machine?</summary><p>Evidence goes to the agent you choose, the same as when you paste logs into it today. reprobe itself sends nothing anywhere, and cases are written to <code>~/.reprobe/cases</code>.</p></details>
-    <details><summary>What if I don't use Postgres or Railway?</summary><p>Every source is optional. Logs can come from any CLI that prints lines (fly, vercel, kubectl, docker) or from files. Without a database, reprobe still works from traces, logs and Sentry.</p></details>
-    <details><summary>What is a pack?</summary><p>One TypeScript file that teaches reprobe your product: how to find the user a complaint is about, which rows matter, your known failure signatures, and how to build an old commit. Every hook is optional.</p></details>
-    <details><summary>Which agents work?</summary><p>Claude Code and Codex start automatically. With neither installed, reprobe prints one line to paste into any coding agent.</p></details>
-  </section>
+    <div>
+      <details><summary>What does it cost?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>Nothing. reprobe is MIT licensed and has no server. The investigation runs on the Claude Code or Codex you already use, so the only cost is your agent's usage.</p></details>
+      <details><summary>Does my data leave my machine?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>Evidence goes to the agent you choose, as it does when you paste logs into it today. reprobe itself sends nothing anywhere, and writes cases to <code>~/.reprobe/cases</code>, outside your repo.</p></details>
+      <details><summary>What if I don't use Postgres or Railway?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>Every source is optional. Logs can come from any CLI that prints lines (fly, vercel, kubectl, docker) or from files. Without a database, reprobe still works from traces, logs and Sentry.</p></details>
+      <details><summary>What is a pack?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>One TypeScript file that teaches reprobe your product: how to find the user a complaint is about, which rows matter, your known failure signatures, and how to build an old commit. Every hook is optional.</p></details>
+      <details><summary>Which agents work?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>Claude Code and Codex start automatically. With neither installed, reprobe prints one line to paste into any coding agent.</p></details>
+    </div>
+  </div>
+</section>
 
+<div class="wrap">
   <footer>
-    <span>reprobe · MIT · built by <a href="https://github.com/codenameakshay">codenameakshay</a></span>
-    <a href="https://github.com/codenameakshay/reprobe">Source on GitHub</a>
+    <span>reprobe is free and MIT licensed. Built by <a href="https://github.com/codenameakshay">codenameakshay</a>.</span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/codenameakshay/reprobe/blob/main/PLAYBOOK.md">Agent playbook</a>
+      <a href="https://github.com/codenameakshay/reprobe">Source on GitHub</a>
+    </nav>
   </footer>
 </div>
+
 <script>
-document.getElementById('copy').addEventListener('click', async (e) => {
-  try { await navigator.clipboard.writeText(document.getElementById('cmd').textContent); e.target.textContent = 'Copied'; }
-  catch { e.target.textContent = 'Select to copy'; }
-  setTimeout(() => (e.target.textContent = 'Copy'), 1500);
+const copy = document.getElementById('copy'), status = document.getElementById('copied');
+let t;
+copy.addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(document.getElementById('cmd').textContent); }
+  catch { status.textContent = 'Copy failed. Select the command to copy it.'; return; }
+  copy.classList.add('done'); status.textContent = 'Copied';
+  clearTimeout(t); t = setTimeout(() => { copy.classList.remove('done'); status.textContent = ''; }, 1600);
+});
+const kase = document.getElementById('case');
+document.getElementById('again').addEventListener('click', () => {
+  kase.classList.remove('play'); void kase.offsetWidth; kase.classList.add('play');
 });
 </script>
 </body>
