@@ -4,6 +4,29 @@
   "description": "Turn a bug complaint into cited evidence, a root cause, and a replay test that fails on the deployed commit. Your coding agent investigates; reprobe keeps production read-only.",
   "license": "MIT",
   "author": "codenameakshay",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codenameakshay/reprobe.git"
+  },
+  "homepage": "https://codenameakshay.github.io/reprobe/",
+  "bugs": {
+    "url": "https://github.com/codenameakshay/reprobe/issues"
+  },
+  "keywords": [
+    "cli",
+    "debugging",
+    "root-cause",
+    "replay",
+    "incident",
+    "observability",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "sentry",
+    "langfuse",
+    "langsmith",
+    "postgres"
+  ],
   "type": "module",
   "bin": {
     "reprobe": "bin/reprobe.mjs"
