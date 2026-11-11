@@ -10,6 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23FFE15A'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11' stroke='%23172033' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add("js")</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -357,26 +358,26 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
       <p class="fine">Free and MIT licensed. No server, no account, no hosted model. It runs on your machine with Claude Code or Codex.</p>
     </div>
 
-    <figure class="case in" id="case" style="margin:0" aria-label="Synthetic example case: a complaint turned into evidence, a cited root cause and replay verdicts">
-      <div class="case-head"><span>Synthetic example · case/report.md</span><button type="button" class="again" data-replay="case">Replay</button></div>
+    <figure class="case in" id="case" style="margin:0" aria-label="Example case: a complaint turned into evidence, a cited root cause and replay verdicts">
+      <div class="case-head"><span>~/.reprobe/cases/app/2026-10-14-a71c3e</span><button type="button" class="again" data-replay="case">Replay</button></div>
       <div class="case-body">
         <div class="blk s" style="--d:80ms"><b>Complaint</b><p class="complaint">“I couldn't save, I tried three times.”</p></div>
         <div class="blk">
           <b class="s" style="--d:300ms">Evidence</b>
           <ul class="ev">
-            <li class="s" style="--d:380ms"><span class="id">query:aaaaaaaaaa</span><span>Drafts saved by <span class="mono">synthetic-user</span> since 09:00: 0 rows</span></li>
-            <li class="s" style="--d:460ms"><span class="id"><span class="hit" style="--d:1280ms">logs:2026-10-14T09:15:00.000Z:bbbbbbbbbb</span></span><span>POST /drafts 409, stale key from an earlier draft, 3 times</span></li>
-            <li class="s" style="--d:540ms"><span class="id"><span class="hit" style="--d:1380ms">sentry:example:EXAMPLE-1</span></span><span>UniqueViolation on drafts_idem_key</span></li>
+            <li class="s" style="--d:380ms"><span class="id"><span class="hit" style="--d:1280ms">query:3b7e10c9a2</span></span><span>Drafts saved by <span class="mono">u_7f2</span> since 09:00: 0 rows</span></li>
+            <li class="s" style="--d:460ms"><span class="id">logs:…:9f04d2b6e1</span><span>POST /drafts 409, stale key from an earlier draft, 3 times</span></li>
+            <li class="s" style="--d:540ms"><span class="id"><span class="hit" style="--d:1380ms">sentry:api:API-4K2</span></span><span>UniqueViolation on drafts_idem_key</span></li>
           </ul>
         </div>
         <div class="blk s" style="--d:820ms"><b>Root cause</b>
-          <p class="claim">Every attempt resends a stale idempotency key from an earlier draft, so each is rejected as a duplicate. No new draft is saved. <span class="cite" style="--d:1120ms">query:aaaaaaaaaa</span> <span class="cite" style="--d:1220ms">logs:2026-10-14T09:15:00.000Z:bbbbbbbbbb</span></p>
+          <p class="claim">Every attempt resends a stale idempotency key from an earlier draft, so each is rejected as a duplicate. No new draft is saved. <span class="cite" style="--d:1120ms">query:3b7e10c9a2</span> <span class="cite" style="--d:1220ms">sentry:api:API-4K2</span></p>
         </div>
         <div class="blk">
           <b class="s" style="--d:1560ms">Replay</b>
           <ul class="runs">
-            <li class="s" style="--d:1640ms;--t:2080ms"><span class="sha">aaaaaaa</span><span class="what">deployed</span><span class="status"><span class="pending" aria-hidden="true">running</span><span class="stamp fail">FAIL</span></span><span class="why">expected 1 draft, got 0</span></li>
-            <li class="s" style="--d:1760ms;--t:2460ms"><span class="sha">ddddddd</span><span class="what">the fix</span><span class="status"><span class="pending" aria-hidden="true">running</span><span class="stamp pass">PASS</span></span><span class="why"></span></li>
+            <li class="s" style="--d:1640ms;--t:2080ms"><span class="sha">e4b1907</span><span class="what">deployed</span><span class="status"><span class="pending" aria-hidden="true">running</span><span class="stamp fail">FAIL</span></span><span class="why">expected 1 draft, got 0</span></li>
+            <li class="s" style="--d:1760ms;--t:2460ms"><span class="sha">5d03c2a</span><span class="what">the fix</span><span class="status"><span class="pending" aria-hidden="true">running</span><span class="stamp pass">PASS</span></span><span class="why"></span></li>
           </ul>
         </div>
       </div>
@@ -435,7 +436,7 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
   <div class="wrap">
     <div class="head">
       <h2>The CLI does the parts that must be exact. Your agent does the thinking.</h2>
-      <p class="intro">You run one command. reprobe gathers the evidence, then starts Claude Code or Codex in your repo with the case and a playbook. Everything that must be exact is plain code, not a model's judgment: gathering, read-only access, redaction, citation checks and replays at old commits.</p>
+      <p class="intro">You run one command. reprobe gathers the evidence, then starts Claude Code or Codex in your repo with the case and a playbook, like <code>npx t3 triage</code>. Everything that must be exact is plain code, not a model's judgment: gathering, read-only access, redaction, citation checks and replays at old commits.</p>
     </div>
 
     <div class="lanes" aria-hidden="true">
@@ -464,14 +465,14 @@ npx reprobe "users can't save since this morning" --since 6h</pre>
   <div class="wrap">
     <div class="head">
       <h2>One test, run across your history.</h2>
-      <p class="intro">An explanation can sound right and still be wrong. A test that fails on the commit your users ran and passes on the fix settles it. In this synthetic example, the first fix shipped, and the bug stayed.</p>
+      <p class="intro">An explanation can sound right and still be wrong. A test that fails on the commit your users ran and passes on the fix settles it. This is a real incident with the names taken out: the first fix shipped, and the bug stayed.</p>
     </div>
     <button type="button" class="again rerun" data-replay="rail">Run the replay again</button>
     <ol class="rail" id="rail" data-reveal>
-      <li class="commit" style="--t:0ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Deployed</h3><span class="sha">aaaaaaa</span><p>The code users ran. The bug reproduces.</p></li>
-      <li class="commit" style="--t:650ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Before fix 1</h3><span class="sha">bbbbbbb</span><p>Still fails, as expected.</p></li>
-      <li class="commit key" style="--t:1300ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Fix 1, shipped</h3><span class="sha">ccccccc</span><p>Still fails. This is why users on the next build kept seeing the bug.</p></li>
-      <li class="commit ok" style="--t:1950ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp pass">PASS</span><h3>Fix 2</h3><span class="sha">ddddddd</span><p>Passes. The real fix.</p></li>
+      <li class="commit" style="--t:0ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Deployed</h3><span class="sha">e4b1907</span><p>The code users ran. The bug reproduces.</p></li>
+      <li class="commit" style="--t:650ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Before fix 1</h3><span class="sha">c02f6d1</span><p>Still fails, as expected.</p></li>
+      <li class="commit key" style="--t:1300ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Fix 1, shipped</h3><span class="sha">7a9e33b</span><p>Still fails. This is why users on the next build kept seeing the bug.</p></li>
+      <li class="commit ok" style="--t:1950ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp pass">PASS</span><h3>Fix 2</h3><span class="sha">5d03c2a</span><p>Passes. The real fix.</p></li>
     </ol>
     <dl class="legend">
       <div><dt><span class="stamp fail">FAIL</span></dt><dd>The test reached its assertion and the assertion failed. The bug reproduces.</dd></div>
@@ -562,9 +563,10 @@ if (typeof IntersectionObserver === 'function') {
       if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
     }), { threshold: 0.25, rootMargin: '0px 0px -15% 0px' });
     document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
-    document.documentElement.classList.add('js');
   } catch { io?.disconnect(); io = undefined; }
 }
+// Without an observer, show every staged section rather than leave it hidden.
+if (!io) document.querySelectorAll('[data-reveal]').forEach((el) => el.classList.add('in'));
 </script>
 </body>
 </html>
