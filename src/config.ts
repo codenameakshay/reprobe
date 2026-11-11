@@ -79,14 +79,27 @@ function containingGitTop(path: string): string | null {
   }
 }
 
-/** Case evidence must not be written into the checkout, including through a symlink alias. */
+/**
+ * Case evidence must never be committable: outside every git work tree, or at a path git ignores.
+ * Symlink aliases are resolved first.
+ */
 export function assertCasesOutsideRepo(casesPath: string, repoPath: string): void {
   const cases = canonicalPath(casesPath);
   const repo = canonicalPath(repoPath);
   const rel = relative(repo, cases);
   const inConfiguredRepo = rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-  if (inConfiguredRepo || containingGitTop(cases)) {
-    throw new Error(`case directory must be outside the repo (${casesPath})`);
+  const top = inConfiguredRepo ? repo : containingGitTop(cases);
+  if (top && !gitIgnores(top, cases)) {
+    throw new Error(`case directory must be outside the repo or ignored by git (${casesPath})`);
+  }
+}
+
+function gitIgnores(top: string, path: string): boolean {
+  try {
+    execFileSync('git', ['-C', top, 'check-ignore', '-q', '--no-index', '--', path], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
   }
 }
 

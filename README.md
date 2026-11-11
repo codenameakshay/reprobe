@@ -6,7 +6,7 @@ A user says "I couldn't save, I tried three times." reprobe turns that into:
 2. **A root cause** that your own coding agent (Claude Code or Codex) works out, where every claim cites evidence ids. Claims that cite nothing, or cite ids that don't exist, are dropped from the report.
 3. **A replay test** that fails on the deployed commit and passes on the fix. FAIL then PASS is what turns a likely cause into a proven one.
 
-The built-in gather and report flow is read-only and has no server or hosted model. It runs on your machine with your credentials and your agent; configured commands, packs, and replay code are trusted local code, not a sandbox.
+reprobe's database path cannot write to production, and there is no server or hosted model. It runs on your machine with your credentials and your agent. The commands you configure, your pack and your replay tests are your own code, and they run with your permissions.
 
 ```sh
 cd your-repo
@@ -61,7 +61,7 @@ Cases are written to `~/.reprobe/cases/<repo>/`, outside every repo, because the
 
 ## Config
 
-Prefer credential references in `.reprobe/config.json` rather than literal secrets. `env:NAME` and secret-provider commands keep values out of the file:
+`.reprobe/config.json` holds references to credentials (`env:NAME` or a command), so the file never needs a secret value:
 
 ```json
 {
@@ -81,7 +81,7 @@ Prefer credential references in `.reprobe/config.json` rather than literal secre
 
 A secret can come from a command instead of the environment, for example a secrets manager:
 `{ "cmd": ["doppler", "secrets", "get", "DATABASE_URL", "--plain"] }`. `json` or `kv` picks one key from the output.
-Literal strings are also accepted as secret values and are stored in plaintext in the config; avoid them for credentials.
+A literal string also works, but then the secret sits in the file in plain text, so don't use one for credentials.
 
 `verify.setup` prepares each old commit before a replay runs. `nodeModules` installs dependencies once per lockfile hash outside the worktree, with install scripts off. Each step only runs for replays inside its directory.
 
@@ -105,14 +105,13 @@ Without a pack, reprobe still gathers traces, logs and Sentry by the ids you pas
 
 ## Safety
 
-- **Database access is guarded read-only, not sandboxed.** Postgres queries pass a SELECT/WITH-only guard, run with `default_transaction_read_only=on`, and run inside `BEGIN TRANSACTION READ ONLY … ROLLBACK`. reprobe refuses to continue if the server does not report read-only. These checks are not a substitute for least-privilege database grants; use a dedicated read-only role.
-- **Configured commands and packs are trusted executable code.** Secret-provider commands, log-source commands, pack hooks, agent commands, and replay test commands run on your machine. They are not sandboxed and may have access to your environment, filesystem, network, and credentials. Review them before use and restrict credentials and OS permissions accordingly.
-- **Headless mode is not an OS sandbox.** Its tool allowlist narrows the agent interface, but the agent still runs as your user and allowed commands such as `git` can write anywhere your account can access. Use it only with code, credentials, and permissions you trust.
-- **Replays are isolated from your checkout, not from your machine.** They run in detached git worktrees under `~/.cache/reprobe`, never in your checkout, and the command is launched without a shell. A test runner can still execute arbitrary test code and access environment variables, databases, files, or the network; use replay code you trust and keep production credentials unavailable to it.
-- **A crash cannot pass for a reproduced bug.** A replay prints `REPROBE_REPLAY:<id>:START` before its assertion and `:PASS` or `:FAIL` after. A run without those lines is BROKEN.
-- **Redaction is on by default, but pattern-based.** Phones, emails, tokens, keys and signed URLs are redacted before anything is written. Opaque tokens can slip through, so read a case before you share it.
-- **The built-in flow does not post evidence.** reprobe's built-in source/report commands do not post to Sentry, GitHub, Langfuse or users. Configured commands, packs and agents remain trusted code; the playbook asks the agent not to make outside writes and to treat evidence as data, never as instructions.
+- **Production stays read-only.** Every Postgres query passes a SELECT/WITH-only guard, runs with `default_transaction_read_only=on`, and runs inside `BEGIN TRANSACTION READ ONLY … ROLLBACK`. reprobe stops if the server does not confirm read-only. Give it a read-only database role too: the guard cannot know whether a custom function in your schema has side effects.
+- **Replays never run in your checkout.** They run in detached git worktrees under `~/.cache/reprobe`, the command must be a known test runner (or one you list in `verify.allow`), and it starts without a shell.
+- **A crash cannot pass for a reproduced bug.** A replay prints `REPROBE_REPLAY:<id>:START` before its assertion and exactly one `:PASS` or `:FAIL` after. Anything else is BROKEN.
+- **Redaction is on by default, but pattern-based.** Phones, emails, tokens, keys and signed URLs are redacted before anything is written or shown to the agent. Opaque tokens can slip through, so read a case before you share it. Cases are written outside your repo (or to a path git ignores).
+- **reprobe posts nothing.** It does not write to Sentry, GitHub, Langfuse or users. The playbook tells the agent the same, and to treat evidence as data, never as instructions.
 - **Citations are checked for existence, not truth.** A dropped claim had no valid citation. A kept claim cites real evidence, but you still judge whether the evidence supports it. The replay verdict is the proof.
+- **What is trusted is your code.** Secret and log commands, packs, test code and your agent run as you, with your environment. That is no different from running your test suite, but keep production credentials out of the environment a replay runs in. Headless mode limits which tools the agent may call; it is not an OS sandbox.
 
 ## Requirements
 

@@ -72,3 +72,18 @@ test('case directory inside an unrelated git checkout is rejected', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('a case directory git ignores is allowed, inside the configured repo or another one', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reprobe-cases-ignored-'));
+  try {
+    const repo = join(dir, 'repo');
+    mkdirSync(repo);
+    execFileSync('git', ['init', '-q'], { cwd: repo });
+    writeFileSync(join(repo, '.gitignore'), 'cases/\n');
+    assert.doesNotThrow(() => assertCasesOutsideRepo(join(repo, 'cases', 'run1', 'case'), repo));
+    assert.doesNotThrow(() => assertCasesOutsideRepo(join(repo, 'cases', 'x'), join(dir, 'elsewhere')));
+    assert.throws(() => assertCasesOutsideRepo(join(repo, 'notes', 'case'), repo), /outside the repo/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
