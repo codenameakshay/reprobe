@@ -10,6 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23FFE15A'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11' stroke='%23172033' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add("js")</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -112,11 +113,11 @@ h1 { font-size: clamp(46px, 6.6vw, 78px); line-height: .98; letter-spacing: -.01
 @keyframes hide { to { opacity: 0; } }
 @keyframes stamp { from { opacity: 0; transform: scale(.92); } }
 @media (prefers-reduced-motion: no-preference) {
-  .case.play .s { animation: rise 320ms var(--ease-out) var(--d) both; }
-  .case.play .cite::before, .case.play .ev .hit::before { animation: sweep 380ms var(--ease-out) var(--d) both; }
-  .case.play .pending { animation: show 1ms linear var(--d) both, hide 120ms ease-out var(--t) forwards; }
-  .case.play .status .stamp { animation: stamp 220ms var(--ease-out) var(--t) both; }
-  .case.play .runs .why { animation: rise 260ms var(--ease-out) calc(var(--t) + 60ms) both; }
+  .case.in .s { animation: rise 320ms var(--ease-out) var(--d) both; }
+  .case.in .cite::before, .case.in .ev .hit::before { animation: sweep 380ms var(--ease-out) var(--d) both; }
+  .case.in .pending { animation: show 1ms linear var(--d) both, hide 120ms ease-out var(--t) forwards; }
+  .case.in .status .stamp { animation: stamp 220ms var(--ease-out) var(--t) both; }
+  .case.in .runs .why { animation: rise 260ms var(--ease-out) calc(var(--t) + 60ms) both; }
 }
 @media (prefers-reduced-motion: reduce) {
   .again { display: none; }
@@ -156,9 +157,9 @@ pre .c { color: var(--code-muted); }
 /* proof: one replay across four commits */
 .rail { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .commit { position: relative; padding-right: 28px; }
-.commit::before { content: ""; position: absolute; left: 24px; right: 0; top: 11px; height: 2px; background: color-mix(in srgb, var(--fail) 45%, transparent); }
-.commit:nth-child(3)::before { background: linear-gradient(90deg, color-mix(in srgb, var(--fail) 45%, transparent), color-mix(in srgb, var(--pass) 55%, transparent)); }
-.commit:last-child::before { display: none; }
+.commit .seg { position: absolute; left: 24px; right: 0; top: 11px; height: 2px; background: color-mix(in srgb, var(--fail) 45%, transparent); }
+.commit:nth-child(3) .seg { background: linear-gradient(90deg, color-mix(in srgb, var(--fail) 45%, transparent), color-mix(in srgb, var(--pass) 55%, transparent)); }
+.commit:last-child .seg { display: none; }
 .dot { width: 24px; height: 24px; border-radius: 50%; background: var(--paper); box-shadow: inset 0 0 0 2px var(--fail); position: relative; }
 .dot::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--fail); }
 .commit.ok .dot { box-shadow: inset 0 0 0 2px var(--pass); }
@@ -190,6 +191,80 @@ pre .c { color: var(--code-muted); }
 .facts { margin: 72px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 64px; }
 .facts dt { font-weight: 600; }
 .facts dd { margin: 6px 0 0; color: var(--muted); font-size: 15.5px; text-wrap: pretty; max-width: 52ch; }
+
+
+/* problem: the guess loop */
+.loopwrap { position: relative; }
+.loop { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 56px; counter-reset: none; }
+.loop li { position: relative; background: var(--surface); border-radius: 14px; padding: 18px 18px 20px; box-shadow: var(--ring), 0 1px 2px rgb(23 32 51 / .05); min-height: 112px; }
+.loop b { display: block; font-weight: 600; line-height: 1.3; }
+.loop span { display: block; color: var(--muted); font-size: 14.5px; margin-top: 6px; }
+.loop li:nth-child(3) { grid-row: 2; grid-column: 2; }
+.loop li:nth-child(4) { grid-row: 2; grid-column: 1; box-shadow: inset 0 0 0 1.5px var(--fail); }
+/* connectors: 1 → 2, 2 ↓ 3, 3 ← 4 (visually), 4 ↑ 1 */
+.loop li::after { position: absolute; font: 500 22px/1 var(--sans); color: var(--muted); }
+.loop li:nth-child(1)::after { content: "→"; left: calc(100% + 17px); top: calc(50% - 11px); }
+.loop li:nth-child(2)::after { content: "↓"; top: calc(100% + 17px); left: calc(50% - 7px); }
+.loop li:nth-child(3)::after { content: "←"; right: calc(100% + 17px); top: calc(50% - 11px); }
+.loop li:nth-child(4)::after { content: "↑"; bottom: calc(100% + 17px); left: calc(50% - 7px); color: var(--fail); }
+.back { position: absolute; left: calc(25% + 18px); top: 50%; transform: translateY(-50%); margin: 0; font: 500 13px/1.2 var(--mono); color: var(--fail); }
+
+/* who it's for */
+.fit { display: grid; grid-template-columns: 1fr 1fr; gap: 40px 64px; }
+.fit h3 { margin-bottom: 14px; }
+.fit ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.fit li { position: relative; padding-left: 30px; color: var(--muted); text-wrap: pretty; }
+.fit li::before { content: ""; position: absolute; left: 0; top: 4px; width: 18px; height: 18px; border-radius: 50%; }
+.fit .yes li::before { background: var(--pass-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M5 9.4l2.6 2.6L13 6.6' fill='none' stroke='%2316804a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 18px no-repeat; }
+.fit .no li::before { background: var(--rule) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M5.5 9h7' stroke='%23566078' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") center / 18px no-repeat; }
+.fit .yes li { color: var(--ink); }
+
+/* how it works: what each step leaves behind */
+.seq .out { display: block; margin-top: 8px; font-size: 13.5px; color: var(--muted); }
+.seq .out code { color: var(--ink); font-size: 12.5px; }
+.seq .n { z-index: 1; }
+
+.rerun { margin: -24px 0 32px; }
+
+@keyframes growx { from { transform: scaleX(0); } }
+@keyframes growy { from { transform: scaleY(0); } }
+@keyframes pop { from { opacity: 0; transform: scale(.5); } }
+@keyframes lit { from { opacity: .28; transform: translateY(4px); } }
+@keyframes focus { from { opacity: .32; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* the guess loop goes round once, then the way back turns red */
+  .js .loop:not(.in) li { opacity: .28; }
+  .js .loop:not(.in) li::after, .js .loop:not(.in) + .back { opacity: 0; }
+  .loop.in li { animation: lit 360ms var(--ease-out) var(--t) both; }
+  .loop.in li::after { animation: rise 260ms var(--ease-out) calc(var(--t) + 260ms) both; }
+  .loop.in + .back { animation: rise 300ms var(--ease-out) 1900ms both; }
+
+  /* proof: the replay runs across history, commit by commit */
+  .js .rail:not(.in) .stamp, .js .rail:not(.in) .commit p, .js .rail:not(.in) .dot::after { opacity: 0; }
+  .js .rail:not(.in) .commit .seg { transform: scaleX(0); }
+  .commit .seg { transform-origin: left center; }
+  .rail.in .dot::after { animation: pop 240ms var(--ease-out) calc(var(--t) + 120ms) both; }
+  .rail.in .stamp { animation: stamp 240ms var(--ease-out) calc(var(--t) + 220ms) both; }
+  .rail.in .commit p { animation: rise 300ms var(--ease-out) calc(var(--t) + 300ms) both; }
+  .rail.in .commit .seg { animation: growx 360ms var(--ease-out) calc(var(--t) + 340ms) backwards; }
+
+  /* safety: the layers close in around the query */
+  .layers.in .layer, .layers.in .query { animation: rise 320ms var(--ease-out) both; }
+  .layers.in .l2 { animation-delay: 120ms; } .layers.in .l3 { animation-delay: 240ms; } .layers.in .query { animation-delay: 380ms; }
+
+  /* faq: answers ease in when opened */
+  .faq details[open] p { animation: rise 240ms var(--ease-out) both; }
+}
+@media (prefers-reduced-motion: reduce) { .rerun { display: none; } }
+
+/* how it works: the lifeline fills as you read, and steps ahead stay quiet */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .seq::after { content: ""; position: absolute; left: calc(50% - 1px); top: 0; bottom: 0; width: 2px; background: var(--ink); transform-origin: top; animation: growy linear both; animation-timeline: view(); animation-range: cover 40vh cover calc(100% - 60vh); }
+    .seq .body { animation: focus linear both; animation-timeline: view(); animation-range: cover 20vh cover 38vh; }
+  }
+}
 
 /* faq */
 .faq details { border-bottom: 1px solid var(--rule); }
@@ -224,16 +299,31 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
   .seq .n { grid-column: 1; }
   .seq .body, .seq .agent .body { grid-column: 2; justify-self: start; max-width: none; }
   .seq .lane { display: block; }
+  .loop { gap: 40px; }
+  .loop li { padding: 14px 14px 16px; min-height: 0; border-radius: 12px; }
+  .loop span { font-size: 13.5px; }
+  .loop li:nth-child(1)::after { left: calc(100% + 10px); }
+  .loop li:nth-child(3)::after { right: calc(100% + 10px); }
+  .loop li:nth-child(2)::after { top: calc(100% + 9px); }
+  .loop li:nth-child(4)::after { bottom: calc(100% + 9px); }
+  .back { left: calc(25% + 14px); font-size: 12px; }
+  .fit { grid-template-columns: minmax(0, 1fr); }
+  .seq::after { left: 15px; }
   .seq code.line, .query { white-space: normal; overflow-wrap: anywhere; }
   .rail { grid-template-columns: minmax(0, 1fr); }
   .commit { padding: 0 0 32px 44px; }
-  .commit::before, .commit:nth-child(3)::before { left: 11px; right: auto; top: 24px; bottom: 0; width: 2px; height: auto; }
-  .commit:nth-child(3)::before { background: linear-gradient(180deg, color-mix(in srgb, var(--fail) 45%, transparent), color-mix(in srgb, var(--pass) 55%, transparent)); }
+  .commit .seg, .commit:nth-child(3) .seg { left: 11px; right: auto; top: 24px; bottom: 0; width: 2px; height: auto; }
+  .commit:nth-child(3) .seg { background: linear-gradient(180deg, color-mix(in srgb, var(--fail) 45%, transparent), color-mix(in srgb, var(--pass) 55%, transparent)); }
   .commit .dot { position: absolute; left: 0; top: 0; }
   .commit .stamp { margin: 0 0 10px; }
   .commit p { max-width: none; }
   .legend, .facts { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .layers { --pad: 10px; }
+}
+@media (max-width: 760px) and (prefers-reduced-motion: no-preference) {
+  .commit .seg { transform-origin: top center; }
+  .js .rail:not(.in) .commit .seg { transform: scaleY(0); }
+  .rail.in .commit .seg { animation-name: growy; }
 }
 </style>
 </head>
@@ -245,6 +335,7 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
       reprobe
     </a>
     <div class="links">
+      <a href="#who">Who it's for</a>
       <a href="#how">How it works</a>
       <a href="#proof">Proof</a>
       <a href="#safety">Safety</a>
@@ -255,7 +346,7 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
   <header class="hero">
     <div>
       <h1>Prove the bug, don't just guess it.</h1>
-      <p class="lede">A user writes in: <q>I couldn't save, I tried three times.</q> reprobe gathers what production saw, read-only. Your coding agent finds the cause, cites evidence for every claim, and writes a test that fails on the code you deployed.</p>
+      <p class="lede">A user reports a bug: <q>I couldn't save, I tried three times.</q> reprobe gathers what production saw, read-only. Your coding agent finds the cause, cites evidence for every claim, and writes a test that fails on the code you deployed.</p>
       <div class="cmd" role="group" aria-label="Install command">
         <span class="p" aria-hidden="true">$</span><code id="cmd">npx reprobe init</code>
         <button type="button" class="copy" id="copy" aria-label="Copy command">
@@ -267,8 +358,8 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
       <p class="fine">Free and MIT licensed. No server, no account, no hosted model. It runs on your machine with Claude Code or Codex.</p>
     </div>
 
-    <figure class="case play" id="case" style="margin:0" aria-label="Example case: a complaint turned into evidence, a cited root cause and replay verdicts">
-      <div class="case-head"><span>~/.reprobe/cases/app/2026-10-14-a71c3e</span><button type="button" class="again" id="again">Replay</button></div>
+    <figure class="case in" id="case" style="margin:0" aria-label="Example case: a complaint turned into evidence, a cited root cause and replay verdicts">
+      <div class="case-head"><span>~/.reprobe/cases/app/2026-10-14-a71c3e</span><button type="button" class="again" data-replay="case">Replay</button></div>
       <div class="case-body">
         <div class="blk s" style="--d:80ms"><b>Complaint</b><p class="complaint">“I couldn't save, I tried three times.”</p></div>
         <div class="blk">
@@ -294,11 +385,58 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
   </header>
 </div>
 
+<section id="problem">
+  <div class="wrap split">
+    <div>
+      <h2>Most bug reports end in a guess.</h2>
+      <p class="intro">A user says something broke. You open the database, the traces, the logs and Sentry in separate tabs, and piece together a story that sounds right. You ship a fix. Whether it worked, you learn from the next complaint.</p>
+      <p class="intro">reprobe replaces the guess with a test. When the test fails on the code your users ran and passes on your fix, the cause is proven, not just plausible.</p>
+    </div>
+    <div class="loopwrap">
+      <ol class="loop" data-reveal aria-label="The usual way: a cycle that repeats">
+        <li style="--t:0ms"><b>A user reports a bug</b><span>“I couldn't save.”</span></li>
+        <li style="--t:420ms"><b>Five tabs open</b><span>Database, traces, logs, Sentry, code</span></li>
+        <li style="--t:840ms"><b>A story that sounds right</b><span>No test, nothing cited</span></li>
+        <li style="--t:1260ms"><b>Ship a fix</b><span>And hope</span></li>
+      </ol>
+      <p class="back" aria-hidden="true">The bug comes back</p>
+    </div>
+  </div>
+</section>
+
+<section id="who">
+  <div class="wrap">
+    <div class="head">
+      <h2>For engineers who get bug reports from real users.</h2>
+      <p class="intro">You run a production app, maybe with AI features, and the evidence for one bug is spread across several systems. You already work with a coding agent. reprobe gives that agent the evidence and a way to prove its answer.</p>
+    </div>
+    <div class="fit">
+      <div>
+        <h3>A good fit if you</h3>
+        <ul class="yes">
+          <li>Get bug reports from users, not only from alerts.</li>
+          <li>Keep evidence in Postgres, Langfuse or LangSmith, Sentry, or logs. Every source is optional.</li>
+          <li>Already use Claude Code or Codex in your repo.</li>
+          <li>Want a failing test before you call a bug fixed.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Not a fit yet if you</h3>
+        <ul class="no">
+          <li>Can't get read access to production data from your machine.</li>
+          <li>Want a hosted dashboard, or triage with no engineer in the loop.</li>
+          <li>Need it to reply to users or file tickets. reprobe posts nothing.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="how">
   <div class="wrap">
     <div class="head">
       <h2>The CLI does the parts that must be exact. Your agent does the thinking.</h2>
-      <p class="intro">Like <code>npx t3 triage</code>, reprobe packages the facts and a playbook, then starts Claude Code or Codex in your repo. Gathering, read-only access, redaction, citation checks and replays at old commits are plain code, not a model's judgment.</p>
+      <p class="intro">You run one command. reprobe gathers the evidence, then starts Claude Code or Codex in your repo with the case and a playbook, like <code>npx t3 triage</code>. Everything that must be exact is plain code, not a model's judgment: gathering, read-only access, redaction, citation checks and replays at old commits.</p>
     </div>
 
     <div class="lanes" aria-hidden="true">
@@ -306,11 +444,11 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
       <div><b>your agent</b><span>Claude Code or Codex, in your repo</span></div>
     </div>
     <ol class="seq">
-      <li><span class="n">1</span><div class="body"><span class="lane">reprobe</span><h3>Gather the evidence</h3><p>Rows, agent traces, logs and Sentry issues for that user and time window, from Postgres, Langfuse, LangSmith, Sentry, Railway, any log CLI or log files. Each item gets a stable id. Missing sources are listed, not guessed around.</p><code class="line">npx reprobe "&lt;complaint&gt;" --since 6h</code></div></li>
-      <li class="agent"><span class="n">2</span><div class="body"><span class="lane">your agent</span><h3>Investigate</h3><p>Reads the case and the code at the deployed commit, then digs further through reprobe's read-only tools. Each answer becomes new evidence it can cite.</p><code class="line">reprobe query &lt;case&gt; "SELECT …"</code></div></li>
-      <li class="agent"><span class="n">3</span><div class="body"><span class="lane">your agent</span><h3>Write the replay</h3><p>The smallest test of the invariant the bug broke, in your own test framework, filled with the real shapes from the evidence.</p><code class="line">&lt;case&gt;/replay.json</code></div></li>
-      <li><span class="n">4</span><div class="body"><span class="lane">reprobe</span><h3>Run it at each commit</h3><p>Each run happens in a detached worktree. You want FAIL on the deployed commit and PASS on the fix.</p><code class="line">reprobe verify &lt;case&gt; &lt;deployed-sha&gt; &lt;fix-sha&gt;</code></div></li>
-      <li><span class="n">5</span><div class="body"><span class="lane">reprobe</span><h3>Check every claim</h3><p>The agent's diagnosis loses any claim that cites nothing, or cites an id that isn't in the evidence. What's left becomes the report.</p><code class="line">reprobe report &lt;case&gt;</code></div></li>
+      <li><span class="n">1</span><div class="body"><span class="lane">reprobe</span><h3>Gather the evidence</h3><p>Rows, agent traces, logs and Sentry issues for that user and time window, from Postgres, Langfuse, LangSmith, Sentry, Railway, any log CLI or log files. Each item gets a stable id. Missing sources are listed, not guessed around.</p><code class="line">npx reprobe "&lt;complaint&gt;" --since 6h</code><span class="out">Writes <code>evidence.json</code> and <code>CASE.md</code></span></div></li>
+      <li class="agent"><span class="n">2</span><div class="body"><span class="lane">your agent</span><h3>Investigate</h3><p>Reads the case and the code at the deployed commit, then digs further through reprobe's read-only tools. Each answer becomes new evidence it can cite.</p><code class="line">reprobe query &lt;case&gt; "SELECT …"</code><span class="out">Adds evidence with new ids</span></div></li>
+      <li class="agent"><span class="n">3</span><div class="body"><span class="lane">your agent</span><h3>Write the replay</h3><p>The smallest test of the invariant the bug broke, in your own test framework, filled with the real shapes from the evidence.</p><code class="line">&lt;case&gt;/replay.json</code><span class="out">Writes a test file and <code>replay.json</code></span></div></li>
+      <li><span class="n">4</span><div class="body"><span class="lane">reprobe</span><h3>Run it at each commit</h3><p>Each run happens in a detached worktree. You want FAIL on the deployed commit and PASS on the fix.</p><code class="line">reprobe verify &lt;case&gt; &lt;deployed-sha&gt; &lt;fix-sha&gt;</code><span class="out">FAIL, PASS or BROKEN for each commit</span></div></li>
+      <li><span class="n">5</span><div class="body"><span class="lane">reprobe</span><h3>Check every claim</h3><p>The agent writes its diagnosis. reprobe drops any claim that cites nothing, or cites an id that isn't in the evidence, and renders the rest.</p><code class="line">reprobe report &lt;case&gt;</code><span class="out">Writes <code>report.md</code></span></div></li>
     </ol>
 
     <div class="start">
@@ -329,11 +467,12 @@ npx reprobe "users can't save since this morning" --since 6h</pre>
       <h2>One test, run across your history.</h2>
       <p class="intro">An explanation can sound right and still be wrong. A test that fails on the commit your users ran and passes on the fix settles it. This is a real incident with the names taken out: the first fix shipped, and the bug stayed.</p>
     </div>
-    <ol class="rail">
-      <li class="commit"><div class="dot"></div><span class="stamp fail">FAIL</span><h3>Deployed</h3><span class="sha">e4b1907</span><p>The code users ran. The bug reproduces.</p></li>
-      <li class="commit"><div class="dot"></div><span class="stamp fail">FAIL</span><h3>Before fix 1</h3><span class="sha">c02f6d1</span><p>Still fails, as expected.</p></li>
-      <li class="commit key"><div class="dot"></div><span class="stamp fail">FAIL</span><h3>Fix 1, shipped</h3><span class="sha">7a9e33b</span><p>Still fails. This is why users on the next build kept seeing the bug.</p></li>
-      <li class="commit ok"><div class="dot"></div><span class="stamp pass">PASS</span><h3>Fix 2</h3><span class="sha">5d03c2a</span><p>Passes. The real fix.</p></li>
+    <button type="button" class="again rerun" data-replay="rail">Run the replay again</button>
+    <ol class="rail" id="rail" data-reveal>
+      <li class="commit" style="--t:0ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Deployed</h3><span class="sha">e4b1907</span><p>The code users ran. The bug reproduces.</p></li>
+      <li class="commit" style="--t:650ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Before fix 1</h3><span class="sha">c02f6d1</span><p>Still fails, as expected.</p></li>
+      <li class="commit key" style="--t:1300ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Fix 1, shipped</h3><span class="sha">7a9e33b</span><p>Still fails. This is why users on the next build kept seeing the bug.</p></li>
+      <li class="commit ok" style="--t:1950ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp pass">PASS</span><h3>Fix 2</h3><span class="sha">5d03c2a</span><p>Passes. The real fix.</p></li>
     </ol>
     <dl class="legend">
       <div><dt><span class="stamp fail">FAIL</span></dt><dd>The test reached its assertion and the assertion failed. The bug reproduces.</dd></div>
@@ -350,7 +489,7 @@ npx reprobe "users can't save since this morning" --since 6h</pre>
         <h2>Every query is read-only, three times over.</h2>
         <p class="intro">reprobe reads the same production your users hit. Its database path wraps each query in three read-only layers, and stops if the server doesn't confirm read-only mode.</p>
       </div>
-      <div class="layers">
+      <div class="layers" data-reveal>
         <div class="layer l1">
           <div class="t"><b>Read-only transaction</b><code>BEGIN READ ONLY … ROLLBACK</code></div>
           <div class="layer l2">
@@ -405,10 +544,15 @@ copy.addEventListener('click', async () => {
   copy.classList.add('done'); status.textContent = 'Copied';
   clearTimeout(t); t = setTimeout(() => { copy.classList.remove('done'); status.textContent = ''; }, 1600);
 });
-const kase = document.getElementById('case');
-document.getElementById('again').addEventListener('click', () => {
-  kase.classList.remove('play'); void kase.offsetWidth; kase.classList.add('play');
-});
+// Each staged animation plays once when it scrolls into view; "Replay" buttons restart one.
+const io = new IntersectionObserver((entries) => entries.forEach((e) => {
+  if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+}), { threshold: 0.25, rootMargin: '0px 0px -15% 0px' });
+document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
+document.querySelectorAll('[data-replay]').forEach((b) => b.addEventListener('click', () => {
+  const el = document.getElementById(b.dataset.replay);
+  io.unobserve(el); el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
+}));
 </script>
 </body>
 </html>
