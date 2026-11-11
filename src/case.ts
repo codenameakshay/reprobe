@@ -1,10 +1,11 @@
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 import { config } from './config.ts';
 import { redactValue } from './redact.ts';
 import type { Evidence, Gathered, Pack, Replay } from './types.ts';
-import { assertSafeRelativePath } from './verify.ts';
+import { assertSafeCheckoutPath, assertSafeRelativePath } from './verify.ts';
 
 export function caseDirFor(arg: string): string {
   if (existsSync(join(arg, 'evidence.json'))) return resolve(arg);
@@ -18,18 +19,43 @@ export function readGathered(dir: string): Gathered {
 }
 
 /** Tool calls the agent makes during an investigation become citable evidence in the same case. */
-export function appendEvidence(dir: string, items: Evidence[]): Gathered {
+export function appendEvidence(dir: string, items: Evidence[]): Evidence[] {
   const g = readGathered(dir);
   const byId = new Map(g.evidence.map((e) => [e.id, e]));
-  for (const e of redactValue(items)) byId.set(e.id, e);
+  const safeItems = redactValue(items);
+  const appended: Evidence[] = [];
+  for (const e of safeItems) {
+    const existing = byId.get(e.id);
+    if (existing && JSON.stringify(existing) === JSON.stringify(e)) {
+      appended.push(existing);
+      continue;
+    }
+    if (existing) {
+      const suffix = createHash('sha256').update(JSON.stringify(e)).digest('hex').slice(0, 10);
+      const base = e.id;
+      let candidate = `${base}~${suffix}`;
+      let collision = 1;
+      while (byId.has(candidate) && JSON.stringify(byId.get(candidate)) !== JSON.stringify({ ...e, id: candidate })) {
+        candidate = `${base}~${suffix}-${collision++}`;
+      }
+      const collisionEvidence = byId.get(candidate);
+      if (collisionEvidence) {
+        appended.push(collisionEvidence);
+        continue;
+      }
+      e.id = candidate;
+    }
+    byId.set(e.id, e);
+    appended.push(e);
+  }
   g.evidence = [...byId.values()].sort((a, b) => (a.at ?? '').localeCompare(b.at ?? '') || a.id.localeCompare(b.id));
-  writeFileSync(join(dir, 'evidence.json'), JSON.stringify(g, null, 2));
-  return g;
+  writeFileSync(assertSafeCheckoutPath(dir, 'evidence.json'), JSON.stringify(g, null, 2));
+  return appended;
 }
 
 function within(parent: string, child: string): boolean {
   const rel = relative(parent, child);
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
 /**

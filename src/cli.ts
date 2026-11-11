@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { launchAgent } from './agent.ts';
 import { appendEvidence, caseDirFor, loadPack, readAgentReplay, readGathered } from './case.ts';
-import { config, loadConfig } from './config.ts';
+import { assertCasesOutsideRepo, config, loadConfig } from './config.ts';
 import { caseIdFor, detect } from './detectors.ts';
 import { validateDiagnosis } from './diagnosis.ts';
 import { doctor } from './doctor.ts';
@@ -21,7 +21,7 @@ import { gatherArchive, gatherLogs } from './sources/logs.ts';
 import { connect } from './sources/postgres.ts';
 import { gatherSentry } from './sources/sentry.ts';
 import type { Check, Evidence, Finding, Gathered, Pack, Replay } from './types.ts';
-import { cleanWorktrees, verifyReplay, type VerifyResult } from './verify.ts';
+import { assertSafeCheckoutPath, assertSafeRelativePath, cleanWorktrees, verifyReplay, type VerifyResult } from './verify.ts';
 
 const USAGE = `reprobe "<complaint>" [--trace <langfuse|langsmith url or id>] [--user <id|phone|email>] [--chat <id>]
         [--sentry <issue>] [--since 2h] [--at <iso>] [--agent claude|codex|none] [--model <m>] [--summary]
@@ -50,7 +50,7 @@ export function parseDuration(s: string): number {
 }
 
 const say = (s: string) => process.stderr.write(`reprobe: ${redactText(s)}\n`);
-const out = (s: string) => process.stdout.write(`${s}\n`);
+const out = (s: string) => process.stdout.write(`${redactText(s)}\n`);
 
 export function formatDoctorCheck(c: Check): string {
   return `${c.ok ? 'ok  ' : c.required ? 'FAIL' : 'MISS'} ${redactText(c.name)}: ${redactText(c.detail)}${c.fix && !c.ok ? `\n     fix: ${redactText(c.fix)}` : ''}\n`;
@@ -62,29 +62,47 @@ function caseReplay(dir: string, g: Gathered, pack: Pack | null): Replay | undef
 
 function readDiagnosis(dir: string, g: Gathered) {
   const file = join(dir, 'diagnosis.json');
-  return existsSync(file) ? validateDiagnosis(JSON.parse(readFileSync(file, 'utf8')), new Set(g.evidence.map((e) => e.id))) : null;
+  return existsSync(file) ? redactValue(validateDiagnosis(JSON.parse(readFileSync(file, 'utf8')), new Set(g.evidence.map((e) => e.id)))) : null;
 }
 
-function readVerify(dir: string): VerifyResult[] {
+type SavedVerify = VerifyResult & { replayFingerprint?: string };
+
+export function replayFingerprint(replay: Replay): string {
+  return createHash('sha256').update(JSON.stringify(replay)).digest('hex');
+}
+
+export function readVerify(dir: string, replay: Replay): VerifyResult[] {
   const file = join(dir, 'verify.json');
-  return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as VerifyResult[]) : [];
+  if (!existsSync(file)) return [];
+  const results = JSON.parse(readFileSync(file, 'utf8')) as SavedVerify[];
+  const fingerprint = replayFingerprint(replay);
+  return results.filter((result) => result.replayFingerprint === fingerprint);
+}
+
+export function writeReplayFiles(dir: string, findings: Finding[]): void {
+  for (const finding of findings) {
+    for (const file of finding.replay?.files ?? []) {
+      assertSafeRelativePath(file.path, 'replay file');
+      const target = assertSafeCheckoutPath(dir, join('replay', file.path));
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, file.content);
+    }
+  }
 }
 
 function write(dir: string, g: Gathered, findings: Finding[], narrative: Narrative | { error: string } | null, verify: VerifyResult[]) {
   const caseId = caseIdFor(g);
   const safe = redactValue({ g, findings, narrative, verify });
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'evidence.json'), JSON.stringify(safe.g, null, 2));
-  writeFileSync(join(dir, 'findings.json'), JSON.stringify({ caseId, subject: safe.g.subject, window: safe.g.window, sources: safe.g.sources, findings: safe.findings }, null, 2));
-  for (const f of safe.findings) {
-    for (const file of f.replay?.files ?? []) {
-      const target = join(dir, 'replay', file.path);
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, file.content);
-    }
-  }
-  if (verify.length) writeFileSync(join(dir, 'verify.json'), JSON.stringify(safe.verify, null, 2));
-  writeFileSync(join(dir, 'report.md'), renderMarkdown(caseId, safe.g, safe.findings, safe.narrative, safe.verify, readDiagnosis(dir, safe.g)));
+  const evidencePath = assertSafeCheckoutPath(dir, 'evidence.json');
+  const findingsPath = assertSafeCheckoutPath(dir, 'findings.json');
+  const verifyPath = assertSafeCheckoutPath(dir, 'verify.json');
+  const reportPath = assertSafeCheckoutPath(dir, 'report.md');
+  writeFileSync(evidencePath, JSON.stringify(safe.g, null, 2));
+  writeFileSync(findingsPath, JSON.stringify({ caseId, subject: safe.g.subject, window: safe.g.window, sources: safe.g.sources, findings: safe.findings }, null, 2));
+  writeReplayFiles(dir, safe.findings);
+  writeFileSync(verifyPath, JSON.stringify(safe.verify, null, 2));
+  writeFileSync(reportPath, renderMarkdown(caseId, safe.g, safe.findings, safe.narrative, safe.verify, readDiagnosis(dir, safe.g)));
 }
 
 export async function main(argv: string[]) {
@@ -141,11 +159,12 @@ export async function main(argv: string[]) {
   if (['agent', 'analyze', 'verify', 'report', 'query', 'logs', 'sentry', 'trace'].includes(cmd)) {
     if (!rest[0]) throw new Error(`${cmd} needs a case dir`);
     const dir = caseDirFor(rest[0]);
+    assertCasesOutsideRepo(dir, config.repo);
     const g = readGathered(dir);
     const add = (items: Evidence[], show: (e: Evidence) => string = (e) => `${e.at ?? '-'}  ${e.summary}`) => {
-      appendEvidence(dir, items);
+      const saved = appendEvidence(dir, items);
       if (!items.length) out('(nothing found)');
-      for (const e of redactValue(items)) out(`[${e.id}] ${show(e)}`);
+      for (const e of redactValue(saved)) out(`[${e.id}] ${show(e)}`);
     };
     switch (cmd) {
       case 'agent': {
@@ -154,20 +173,26 @@ export async function main(argv: string[]) {
       }
       case 'analyze': {
         const findings = detect(g, pack);
-        write(dir, g, findings, values.summary ? await narrate(g, findings) : null, readVerify(dir));
+        const replay = caseReplay(dir, g, pack);
+        write(dir, g, findings, values.summary ? await narrate(g, findings) : null, replay ? readVerify(dir, replay) : []);
         return out(join(dir, 'report.md'));
       }
       case 'verify': {
         const replay = caseReplay(dir, g, pack);
         if (!replay) throw new Error('this case has no replay: write replay.json (see the playbook) or let a detector produce one');
+        const verifyPath = assertSafeCheckoutPath(dir, 'verify.json');
         const results = await verifyReplay(dir, replay, rest.slice(1), pack, say);
-        const kept = [...readVerify(dir).filter((v) => !results.some((r) => r.sha === v.sha)), ...results];
-        writeFileSync(join(dir, 'verify.json'), JSON.stringify(redactValue(kept), null, 2));
+        const fingerprint = replayFingerprint(replay);
+        const kept = [...readVerify(dir, replay).filter((v) => !results.some((r) => r.sha === v.sha)), ...results]
+          .map((result) => ({ ...result, replayFingerprint: fingerprint }));
+        writeFileSync(verifyPath, JSON.stringify(redactValue(kept), null, 2));
         for (const v of results) out(`${v.commit} ${v.sha.slice(0, 10)} ${v.outcome.toUpperCase()} ${v.detail}\n  log: ${v.logFile}`);
         return;
       }
       case 'report': {
-        write(dir, g, detect(g, pack), null, readVerify(dir));
+        const findings = detect(g, pack);
+        const replay = caseReplay(dir, g, pack);
+        write(dir, g, findings, null, replay ? readVerify(dir, replay) : []);
         const d = readDiagnosis(dir, g);
         out(join(dir, 'report.md'));
         if (!d) out('no diagnosis.json yet: only detector findings are in the report');
@@ -224,11 +249,14 @@ export async function main(argv: string[]) {
     say,
   );
   const dir = resolve(values.out ?? config.casesDir, caseIdFor(g));
+  assertCasesOutsideRepo(dir, config.repo);
   const findings = detect(g, pack);
   const summary = values.summary && !values['no-llm'] ? (say('asking the LLM for a cited summary'), await narrate(g, findings)) : null;
   const replay = findings.find((f) => f.replay)?.replay;
   mkdirSync(dir, { recursive: true });
-  const verify = values.verify!.length && replay ? await verifyReplay(dir, replay, values.verify!, pack, say) : [];
+  const verify = values.verify!.length && replay
+    ? (await verifyReplay(dir, replay, values.verify!, pack, say)).map((result) => ({ ...result, replayFingerprint: replayFingerprint(replay) }))
+    : [];
   write(dir, g, findings, summary, verify);
   const top = findings[0];
   out(join(dir, 'report.md'));

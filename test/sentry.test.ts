@@ -90,6 +90,13 @@ test('sentryReadState reports a 403 as missing-credentials and names the event:r
   assert.match(out.detail, /event:read/);
 });
 
+test('sentryReadState rejects an empty project list without invoking sentry-cli', async () => {
+  useSentry({ projects: [] });
+  const { runner, calls } = fakeRunner(() => ({ stdout: 'unexpected' }));
+  assert.deepEqual(await sentryReadState(runner), { source: 'sentry', state: 'error', detail: 'no Sentry projects configured' });
+  assert.equal(calls.length, 0);
+});
+
 test('parseIssueTable parses the documented table into literal rows', () => {
   const text = `+------------+---------------------+------------------------------------------+------------+------------------------------+
 | Issue ID   | Short ID            | Title                                    | Status     | Last seen                    |
@@ -184,6 +191,39 @@ test('gatherSentry keeps issues seen within a day of window.from and drops older
     '--max-rows',
     '50',
   ]);
+});
+
+test('gatherSentry reports partial project failures alongside successful project evidence', async () => {
+  useSentry();
+  const { runner } = fakeRunner((args) => {
+    if (args[0] === 'info') return { stdout: 'ok' };
+    if (projectOf(args) === 'api') return { stdout: tableOf([['1', 'API-1', 'Recent crash', 'unresolved', '2026-07-28 08:44:48.123 UTC']]) };
+    return { code: 1, stderr: 'temporary failure' };
+  });
+  const out = await gatherSentry({ window: WINDOW, runner });
+  assert.equal(out.status.state, 'ok');
+  assert.match(out.status.detail, /1 issues; some project reads failed: temporary failure/);
+  assert.equal(out.evidence.length, 1);
+});
+
+test('gatherSentry does not call a partial project failure an empty result', async () => {
+  useSentry();
+  const { runner } = fakeRunner((args) => {
+    if (args[0] === 'info') return { stdout: 'ok' };
+    return projectOf(args) === 'api' ? { stdout: tableOf([]) } : { code: 1, stderr: 'temporary failure' };
+  });
+  const out = await gatherSentry({ window: WINDOW, runner });
+  assert.equal(out.status.state, 'error');
+  assert.match(out.status.detail, /some project reads failed: temporary failure/);
+  assert.equal(out.evidence.length, 0);
+});
+
+test('gatherSentry does not call sentry-cli when the project list is empty', async () => {
+  useSentry({ projects: [] });
+  const { runner, calls } = fakeRunner(() => ({ stdout: 'unexpected' }));
+  const out = await gatherSentry({ window: WINDOW, runner });
+  assert.deepEqual(out, { status: { source: 'sentry', state: 'error', detail: 'no Sentry projects configured' }, evidence: [] });
+  assert.equal(calls.length, 0);
 });
 
 test('gatherSentry links issues to sentry.url when the config sets it', async () => {

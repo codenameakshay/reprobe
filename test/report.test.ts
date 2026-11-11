@@ -73,3 +73,54 @@ test('report renders a diagnosis with its root cause, evidence and dropped claim
   assert.match(report, /Dropped \(no valid citation\)/);
   assert.match(report, /~~An uncited claim~~/);
 });
+
+test('report escapes untrusted markdown and HTML and includes diagnosis citations in timeline', () => {
+  const evidence: Evidence[] = [{ id: 'db:known', source: 'db', at: null, kind: 'row', summary: 'known <b>row</b>', data: {}, link: 'javascript:alert(1)' }];
+  const diagnosis: Diagnosis = {
+    agent: '<svg/onload=alert(1)>', rootCause: { text: '<img src=x onerror=alert(1)>', confidence: 'high', evidence: ['db:known'] },
+    summary: [], hypotheses: [], unknowns: [], fix: null, dropped: [],
+  };
+  const report = renderMarkdown('case', g(evidence), [], null, [], diagnosis);
+  assert.doesNotMatch(report, /<script>|<img |<b>|<svg/);
+  assert.match(report, /&lt;img src=x onerror=alert\\\(1\\\)&gt;/);
+  assert.doesNotMatch(report, /\]\(javascript:/);
+  assert.doesNotMatch(report, /\]\(javascript:/);
+  assert.match(report, /\| - \| db \|.*`db:known`/);
+});
+
+test('report makes table pipes single-escaped and timeline keeps diagnosis and narrative cited info logs only', () => {
+  const evidence: Evidence[] = [
+    { id: 'log:diag|cited', source: 'logs', at: null, kind: 'log.info', summary: 'diagnosis|detail', data: {} },
+    { id: 'log:narrative', source: 'logs', at: null, kind: 'log.info', summary: 'narrative cited', data: {} },
+    { id: 'log:uncited', source: 'logs', at: null, kind: 'log.info', summary: 'irrelevant info', data: {} },
+  ];
+  const diagnosis: Diagnosis = {
+    agent: 'test-agent', rootCause: { text: 'cause', confidence: 'high', evidence: ['log:diag|cited'] },
+    summary: [], hypotheses: [], unknowns: [], fix: null, dropped: [],
+  };
+  const narrative = { model: 'test', summary: [{ text: 'summary', evidence: ['log:narrative'] }], hypotheses: [], dropped: [] };
+  const report = renderMarkdown('case', g(evidence), [], narrative, [], diagnosis);
+  const timeline = report.slice(report.indexOf('## Timeline'));
+  assert.match(timeline, /`log:diag\\\|cited`/);
+  assert.match(timeline, /`log:narrative`/);
+  assert.doesNotMatch(timeline, /log:uncited|irrelevant info/);
+  assert.match(timeline, /diagnosis\\\|detail/);
+  assert.doesNotMatch(timeline, /diagnosis\\\\\\\|detail/);
+});
+
+test('report encodes parentheses in safe link hrefs', () => {
+  const evidence: Evidence[] = [{ id: 'db:known', source: 'db', at: null, kind: 'row', summary: 'known', data: {}, link: 'https://example.test/path_(item)' }];
+  const findings = [{ signature: 'audit', title: 'finding', confidence: 'low' as const, rootCause: 'cause', evidence: ['db:known'], unknowns: [] }];
+  const report = renderMarkdown('case', g(evidence), findings, null);
+  assert.match(report, /\]\(https:\/\/example\.test\/path_%28item%29\)/);
+});
+
+test('report redacts private values even when supplied directly by a diagnosis caller', () => {
+  const diagnosis: Diagnosis = {
+    agent: 'agent+private@example.com', rootCause: { text: 'token=report-secret-value', confidence: 'high', evidence: ['db:known'] },
+    summary: [], hypotheses: [], unknowns: [], fix: null, dropped: [],
+  };
+  const report = renderMarkdown('case', g([{ id: 'db:known', source: 'db', at: null, kind: 'row', summary: 'ok', data: {} }]), [], null, [], diagnosis);
+  assert.doesNotMatch(report, /agent\+private@example\.com|report-secret-value/);
+  assert.match(report, /\\\[email\\\]|\\\[redacted\\\]/);
+});

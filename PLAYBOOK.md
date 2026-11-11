@@ -11,6 +11,14 @@ the CASE.md file you were pointed to. Read it first.
 
 ## Rules that never bend
 
+These are workflow rules, not an OS sandbox. The reprobe CLI, configured source and secret commands,
+packs, the coding agent, and replay test code execute with the local permissions and environment they
+are given. Review executable configuration and replay files, keep production credentials out of the
+agent/replay environment where possible, and use a least-privilege read-only database role. A detached
+worktree isolates replay edits from the checkout; it does not restrict filesystem, network, or
+database access. Headless mode's tool allowlist is not an OS sandbox either: allowed commands such as
+`git` still run as the engineer and can write outside the worktree wherever that account has access.
+
 1. **Production is read-only.** Reach production data only through the reprobe commands below.
    Never open a database connection yourself, never use credentials you find, never run a
    migration, a write, or a replay against a production or shared database.

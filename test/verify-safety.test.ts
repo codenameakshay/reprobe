@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +45,8 @@ const fixture = async (body: (f: Fixture) => Promise<void>, metadata = 'safe', s
   const cache = join(base, 'cache');
   const wt = join(cache, 'wt', 'repo', sha.slice(0, 12));
   const lock = '{}';
-  const deps = join(cache, 'deps', `server-${createHash('sha256').update(lock).digest('hex').slice(0, 12)}`);
+  const depsHash = createHash('sha256').update(lock).update('\0').update('{}').digest('hex').slice(0, 12);
+  const deps = join(cache, 'deps', `server-${depsHash}`);
   const previous = config;
   const calls: string[][] = [];
   mkdirSync(join(repo, '.git'), { recursive: true });
@@ -87,6 +88,23 @@ test('replay paths reject traversal and absolute paths', () => {
   assert.equal(assertSafeRelativePath('server/src/test.spec.ts', 'replay file'), 'server/src/test.spec.ts');
 });
 
+test('root cwd is valid for replays and root setup steps', async () => {
+  await fixture(async ({ base, wt, calls, runner }) => {
+    const replay = replayFixture({ cwd: '.' });
+    assert.doesNotThrow(() => assertSafeReplay(replay));
+    const invoked: string[] = [];
+    const mocked: Runner = async (cmd, args, opts) => {
+      if (cmd === 'prepare' || args.includes('--runTestsByPath')) invoked.push(`${cmd}:${opts?.cwd}`);
+      if (args.includes('--runTestsByPath')) return ok(`${marker}:START\n${marker}:PASS`);
+      return runner(cmd, args, opts);
+    };
+    const results = await verifyReplay(base, replay, ['HEAD'], null, () => {}, mocked);
+    assert.equal(results[0].outcome, 'pass');
+    assert.deepEqual(invoked, [`prepare:${wt}`, `npx:${wt}`]);
+    assert.ok(calls.some(([cmd]) => cmd === 'git'));
+  }, 'safe', [{ cwd: '.', run: ['prepare'] }]);
+});
+
 test('assertSafeReplay accepts a known runner and refuses an unknown one', () => {
   assert.doesNotThrow(() => assertSafeReplay(replayFixture()));
   assert.throws(() => assertSafeReplay(replayFixture({ command: ['rm', '-rf', '/'] })), /not a known test runner/);
@@ -102,6 +120,9 @@ test('assertSafeReplay honours verify.allow for a custom runner', () => {
 test('assertSafeReplay refuses a malformed marker or a replay that never prints START', () => {
   assert.throws(() => assertSafeReplay(replayFixture({ marker: 'BAD marker' })), /marker/);
   assert.throws(() => assertSafeReplay(replayFixture({ files: [{ path: 'server/x.spec.ts', mode: 'create', content: 'no marker here' }] })), /START/);
+  assert.throws(() => assertSafeReplay(replayFixture({ files: [{ path: '.git/config', mode: 'create', content: `${marker}:START` }] })), /git metadata/);
+  assert.throws(() => assertSafeReplay(replayFixture({ files: [{ path: 'server/.git/index', mode: 'create', content: `${marker}:START` }] })), /git metadata/);
+  assert.throws(() => assertSafeReplay(replayFixture({ files: [{ path: '.GIT', mode: 'create', content: `${marker}:START` }] })), /git metadata/);
 });
 
 test('worktree target must be a non-symlink descendant of cache and outside the source checkout', () => {
@@ -136,6 +157,23 @@ test('replay write paths cannot follow checkout symlinks out of a worktree', () 
   }
 });
 
+for (const linkDirectory of [false, true]) {
+  test(`verifyReplay refuses a symlinked verify ${linkDirectory ? 'directory' : 'log file'} without overwriting its target`, async () => {
+    await fixture(async ({ base, repo, runner }) => {
+      const target = join(repo, 'user-file');
+      writeFileSync(target, 'keep user contents');
+      if (linkDirectory) symlinkSync(repo, join(base, 'verify'), 'dir');
+      else {
+        mkdirSync(join(base, 'verify'));
+        symlinkSync(target, join(base, 'verify', `${sha.slice(0, 12)}.log`));
+      }
+      await assert.rejects(verifyReplay(base, replayFixture(), ['HEAD'], null, () => {}, runner), /symlink/);
+      assert.equal(readFileSync(target, 'utf8'), 'keep user contents');
+      assert.equal(existsSync(join(repo, `${sha.slice(0, 12)}.log`)), false);
+    });
+  });
+}
+
 for (const metadata of ['attached', 'foreign', 'error', 'primary-git-dir', 'unregistered', 'foreign-backpointer']) {
   test(`verifyReplay refuses ${metadata} cached checkout before destructive git`, async () => {
     await fixture(async ({ base, calls, runner }) => {
@@ -160,6 +198,72 @@ test('verifyReplay never installs into a foreign node_modules symlink', async ()
     symlinkSync(join(repo, 'node_modules'), join(wt, 'server/node_modules'), 'dir');
     await assert.rejects(verifyReplay(base, replayFixture(), ['HEAD'], null, () => {}, runner), /node_modules/);
     assert.equal(calls.some(([cmd]) => cmd !== 'git'), false);
+  });
+});
+
+for (const linked of [false, true]) {
+  test(`verifyReplay reinstalls missing cached node_modules when the completion marker exists${linked ? ' behind its owned symlink' : ''}`, async () => {
+    await fixture(async ({ base, deps, wt, runner }) => {
+      writeFileSync(join(deps, '.reprobe-installed'), 'old success\n');
+      rmSync(join(deps, 'node_modules'), { recursive: true, force: true });
+      if (linked) symlinkSync(join(deps, 'node_modules'), join(wt, 'server/node_modules'), 'dir');
+      let installs = 0;
+      const mocked: Runner = async (cmd, args, opts) => {
+        if (cmd === 'npm') {
+          installs++;
+          mkdirSync(join(opts!.cwd, 'node_modules'), { recursive: true });
+          writeFileSync(join(opts!.cwd, 'node_modules/.package-lock.json'), '{}');
+          return ok();
+        }
+        if (args.includes('--runTestsByPath')) return ok(`${marker}:START\n${marker}:PASS`);
+        return runner(cmd, args, opts);
+      };
+      const results = await verifyReplay(base, replayFixture(), ['HEAD'], null, () => {}, mocked);
+      assert.equal(results[0].outcome, 'pass');
+      assert.equal(installs, 1);
+      assert.equal(readFileSync(join(deps, 'node_modules/.package-lock.json'), 'utf8'), '{}');
+    });
+  });
+}
+
+test('verifyReplay separates dependency cache entries for manifests sharing a lockfile', async () => {
+  await fixture(async ({ base, wt, runner }) => {
+    let installs = 0;
+    const mocked: Runner = async (cmd, args, opts) => {
+      if (cmd === 'npm') {
+        installs++;
+        mkdirSync(join(opts!.cwd, 'node_modules'), { recursive: true });
+        writeFileSync(join(opts!.cwd, 'node_modules/.package-lock.json'), '{}');
+        return ok();
+      }
+      if (args.includes('--runTestsByPath')) return ok(`${marker}:START\n${marker}:PASS`);
+      return runner(cmd, args, opts);
+    };
+    assert.equal((await verifyReplay(base, replayFixture(), ['HEAD'], null, () => {}, mocked))[0].outcome, 'pass');
+    rmSync(join(wt, 'server/node_modules'), { recursive: true, force: true });
+    writeFileSync(join(wt, 'server/package.json'), '{"name":"different-manifest"}');
+    assert.equal((await verifyReplay(base, replayFixture(), ['HEAD'], null, () => {}, mocked))[0].outcome, 'pass');
+    assert.equal(installs, 2);
+  });
+});
+
+test('verifyReplay accepts a successful zero-dependency install that creates no node_modules', async () => {
+  await fixture(async ({ base, deps, runner }) => {
+    rmSync(join(deps, 'node_modules'), { recursive: true, force: true });
+    let installs = 0;
+    const mocked: Runner = async (cmd, args, opts) => {
+      if (cmd === 'npm') {
+        installs++;
+        return ok();
+      }
+      if (args.includes('--runTestsByPath')) return ok(`${marker}:START\n${marker}:PASS`);
+      return runner(cmd, args, opts);
+    };
+    const results = await verifyReplay(base, replayFixture(), ['HEAD'], null, () => {}, mocked);
+    assert.equal(results[0].outcome, 'pass');
+    assert.equal(installs, 1);
+    assert.equal(existsSync(join(deps, 'node_modules')), true);
+    assert.equal(existsSync(join(deps, '.reprobe-installed')), true);
   });
 });
 
@@ -258,5 +362,35 @@ test('verifyReplay redacts a failing setup step and marks the commit broken with
     assert.equal(results[0].outcome, 'broken');
     assert.equal(JSON.stringify({ results, logs }).includes('opaque-secret'), false);
     assert.equal(calls.some(([cmd, ...args]) => cmd === 'npx' && args.includes('--runTestsByPath')), false);
-  }, 'safe', [{ cwd: 'server', run: ['npm', 'ci'] }]);
+  }, 'safe', [{ cwd: 'server', run: ['npm', 'ci', '--token=opaque-secret'] }]);
+});
+
+test('verifyReplay replaces a stale log when a cached commit becomes not-applicable', async () => {
+  await fixture(async ({ base, runner }) => {
+    const passedRun: Runner = async (cmd, args, opts) => args.includes('--runTestsByPath')
+      ? ok(`${marker}:START\n${marker}:PASS`)
+      : runner(cmd, args, opts);
+    const first = await verifyReplay(base, replayFixture(), ['HEAD'], null, () => {}, passedRun);
+    assert.match(readFileSync(first[0].logFile, 'utf8'), new RegExp(`${marker}:PASS`));
+
+    const second = await verifyReplay(base, replayFixture({ requires: ['server/missing.ts'] }), ['HEAD'], null, () => {}, runner);
+    assert.equal(second[0].outcome, 'not-applicable');
+    const log = readFileSync(second[0].logFile, 'utf8');
+    assert.match(log, /not-applicable: missing at this commit/);
+    assert.doesNotMatch(log, new RegExp(`${marker}:PASS`));
+  });
+});
+
+test('verifyReplay redacts setup command arguments in raw log callbacks', async () => {
+  await fixture(async ({ base, calls, runner }) => {
+    const logs: string[] = [];
+    const mocked: Runner = async (cmd, args, opts) => cmd === 'npm'
+      ? { code: 1, stdout: '', stderr: 'install failed' }
+      : runner(cmd, args, opts);
+    const results = await verifyReplay(base, replayFixture(), ['HEAD'], null, (message) => logs.push(message), mocked);
+    assert.equal(results[0].outcome, 'broken');
+    assert.equal(JSON.stringify(logs).includes('opaque-secret'), false);
+    assert.ok(logs.some((message) => message.includes('--token=[redacted]')));
+    assert.equal(calls.some(([cmd]) => cmd === 'npx'), false);
+  }, 'safe', [{ cwd: 'server', run: ['npm', 'ci', '--token=opaque-secret'] }]);
 });

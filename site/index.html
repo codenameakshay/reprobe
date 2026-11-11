@@ -153,16 +153,16 @@ b72e05d1c3 <span class="ok">PASS</span>  replay passed</pre>
     <div class="split">
       <div>
         <div class="kicker">Safety</div>
-        <h2>Production stays read-only. Three locks deep.</h2>
-        <p class="intro">reprobe reads the same production your users hit, so it is built to be unable to change it.</p>
+        <h2>Read-only guardrails, not a sandbox.</h2>
+        <p class="intro">The built-in database path checks every query and transaction. Configured commands, packs, agents and replay tests still run with your machine's permissions.</p>
         <div class="sources"><span>postgres</span><span>langfuse</span><span>langsmith</span><span>sentry</span><span>railway</span><span>any log CLI</span><span>log files</span></div>
       </div>
       <ul class="checks">
-        <li><b>Every query is checked three times.</b> A SELECT-only guard, a read-only session, and <code>BEGIN READ ONLY … ROLLBACK</code>. reprobe stops if the server doesn't confirm read-only.</li>
-        <li><b>Replays never touch a database.</b> They are unit tests in detached worktrees, never in your checkout, run without a shell.</li>
-        <li><b>Redacted by default.</b> Phones, emails, tokens and keys are removed before anything is written. Cases live outside your repo.</li>
-        <li><b>No outside writes.</b> Nothing is posted to Sentry, GitHub or users. The agent is told evidence is data, never instructions.</li>
-        <li><b>Your keys stay yours.</b> The config holds env var names or commands, never values.</li>
+        <li><b>Database reads have three guardrails.</b> A SELECT-only guard, a read-only session, and <code>BEGIN READ ONLY … ROLLBACK</code>. Use least-privilege database grants too.</li>
+        <li><b>Replays are checkout-isolated, not machine-isolated.</b> They use detached worktrees and launch without a shell, but test code can still access your environment, files, databases and network.</li>
+        <li><b>Configured code is trusted code.</b> Secret-provider and log-source commands, pack hooks, and agents run with your local permissions. Headless tool limits are not an OS sandbox; even an allowed <code>git</code> command can write outside the worktree.</li>
+        <li><b>Redacted by default.</b> Phones, emails, tokens and keys are removed before a case is written. Pattern-based redaction can miss opaque secrets; cases live outside your repo.</li>
+        <li><b>The built-in flow does not post evidence.</b> It does not send writes to Sentry, GitHub or users. An agent or configured command remains trusted code, and should treat evidence as data, not instructions.</li>
       </ul>
     </div>
   </section>

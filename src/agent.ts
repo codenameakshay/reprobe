@@ -5,13 +5,17 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.ts';
 import { run } from './exec.ts';
+import { redactText } from './redact.ts';
 import type { Finding, Gathered } from './types.ts';
+import { assertSafeCheckoutPath } from './verify.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(HERE);
 /** How the agent calls reprobe back: this exact install and config, so it works under npx too. */
+const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+
 export const reprobeCmd = () =>
-  `"${process.execPath}" --no-warnings "${join(HERE, import.meta.url.endsWith('.ts') ? 'cli.ts' : 'cli.js')}"${config.file ? ` --config "${config.file}"` : ''}`;
+  `${shellQuote(process.execPath)} --no-warnings ${shellQuote(join(HERE, import.meta.url.endsWith('.ts') ? 'cli.ts' : 'cli.js'))}${config.file ? ` --config ${shellQuote(config.file)}` : ''}`;
 
 interface Agent {
   id: 'claude' | 'codex';
@@ -24,7 +28,7 @@ const AGENTS: Agent[] = [
 
 export function caseContext(dir: string, g: Gathered, findings: Finding[], headless = false): string {
   const bad = g.sources.filter((s) => s.state !== 'ok');
-  return [
+  return redactText([
     `# reprobe case ${dir.split('/').pop()}`,
     '',
     `- Complaint: ${JSON.stringify(g.input.complaint)}`,
@@ -49,7 +53,7 @@ export function caseContext(dir: string, g: Gathered, findings: Finding[], headl
     '---',
     '',
     readFileSync(join(ROOT, 'PLAYBOOK.md'), 'utf8'),
-  ].join('\n');
+  ].join('\n'));
 }
 
 async function installed(): Promise<Agent[]> {
@@ -77,7 +81,7 @@ async function pick(agents: Agent[]): Promise<Agent> {
  */
 export async function launchAgent(dir: string, g: Gathered, findings: Finding[], opts: { agent?: string; model?: string; headless?: boolean }): Promise<number> {
   const casePath = join(dir, 'CASE.md');
-  writeFileSync(casePath, caseContext(dir, g, findings, opts.headless));
+  writeFileSync(assertSafeCheckoutPath(dir, 'CASE.md'), caseContext(dir, g, findings, opts.headless));
   const have = await installed();
   let agent: Agent | undefined;
   if (opts.agent) {
@@ -92,7 +96,7 @@ export async function launchAgent(dir: string, g: Gathered, findings: Finding[],
     process.stderr.write(`No agent CLI (claude, codex) found. Paste this into any coding agent, opened in ${config.repo}:\n\n  Read ${casePath} and follow it.\n\n`);
     return 0;
   }
-  const prompt = `Read the file "${casePath}" and follow it exactly: it is a production bug investigation playbook with the case context at the top.`;
+  const prompt = `Read the file ${JSON.stringify(casePath)} and follow it exactly: it is a production bug investigation playbook with the case context at the top.`;
   const args = [...(opts.model ? ['--model', opts.model] : [])];
   if (opts.headless) {
     if (agent.id !== 'claude') throw new Error('headless runs support claude only for now');
@@ -115,7 +119,7 @@ export function headlessTools(dir: string): string[] {
     'Grep',
     'Glob',
     ...['show', 'log', 'diff', 'grep', 'blame', 'rev-parse', 'ls-tree', 'cat-file'].map((c) => `Bash(git ${c}:*)`),
-    `Bash(${reprobeCmd()}:*)`,
+    ...['query', 'logs', 'sentry', 'trace', 'verify', 'report'].map((c) => `Bash(${reprobeCmd()} ${c}:*)`),
     // Edit rules cover every file-writing tool; `//` marks an absolute path.
     `Edit(/${dir}/**)`,
   ];

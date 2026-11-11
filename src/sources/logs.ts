@@ -27,6 +27,15 @@ function timestampMs(value: string): number {
   return Date.parse(normalized);
 }
 
+function safeWindow(w: Window): Window | null {
+  const timestamp = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/;
+  if (!timestamp.test(w.from) || !timestamp.test(w.to)) return null;
+  const from = Date.parse(w.from);
+  const to = Date.parse(w.to);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) return null;
+  return { from: new Date(from).toISOString(), to: new Date(to).toISOString() };
+}
+
 function kv(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const m of text.matchAll(KV)) out[m[1]] = m[3] ?? m[2];
@@ -194,19 +203,26 @@ function fileLines(src: { name: string; file: string }, w: Window): { lines: Log
   const files = globSync(src.file, { cwd: config.repo }).map((f) => resolve(config.repo, f)).sort();
   if (!files.length) return { source: 'logs', state: 'not-found', detail: `no file matches ${src.file}` };
   const lines: LogLine[] = [];
+  const errors: string[] = [];
   for (const f of files) {
-    lines.push(...mergeContinuations(readFileSync(f, 'utf8').split('\n').map(parseLogLine).filter((l): l is LogLine => l !== null && inWindow(l.at, w))));
+    try {
+      lines.push(...mergeContinuations(readFileSync(f, 'utf8').split('\n').map(parseLogLine).filter((l): l is LogLine => l !== null && inWindow(l.at, w))));
+    } catch (e) {
+      errors.push(`${basename(f)}: ${(e as Error).message}`);
+    }
   }
-  return { lines, errors: [], note: `${files.length} file(s)` };
+  return { lines, errors, note: errors.length ? `${files.length - errors.length} readable file(s)` : `${files.length} file(s)` };
 }
 
 /** Every configured log source, filtered to lines that mention the ids or look like failures. */
 export async function gatherLogs(w: Window, ids: string[], runner: Runner = run): Promise<Result[]> {
   const sources = config.sources.logs ?? [];
   if (!sources.length) return [{ status: { source: 'logs', state: 'skipped', detail: 'no log source in the config' }, evidence: [] }];
+  const normalizedWindow = safeWindow(w);
+  if (!normalizedWindow) return sources.map((src) => ({ status: { source: 'logs', state: 'error', detail: `${src.name}: invalid log window; expected ordered ISO timestamps` }, evidence: [] }));
   const out: Result[] = [];
   for (const src of sources) {
-    const got = 'railway' in src ? await railwayLines(src, w, runner) : 'command' in src ? await commandLines(src, w, runner) : fileLines(src, w);
+    const got = 'railway' in src ? await railwayLines(src, normalizedWindow, runner) : 'command' in src ? await commandLines(src, normalizedWindow, runner) : fileLines(src, normalizedWindow);
     if ('state' in got) {
       out.push({ status: { ...got, detail: `${src.name}: ${got.detail}` }, evidence: [] });
       continue;

@@ -9,20 +9,92 @@ import type { Evidence, SourceStatus, Window } from '../types.ts';
 export function assertReadOnlySql(sql: string): void {
   const s = sql.trim();
   if (!/^(select|with)\b/i.test(s)) throw new Error('reprobe only runs SELECT/WITH queries');
-  const withoutStrings = s.replace(/'(?:[^']|'')*'/g, "''");
-  if (withoutStrings.includes(';')) throw new Error('reprobe refuses multi-statement SQL');
-  if (withoutStrings.includes('\\')) throw new Error('reprobe refuses psql meta-commands or escaped identifiers');
-  if (/\bU&"/i.test(s)) throw new Error('reprobe refuses Unicode-escaped identifiers');
-  const banned = /\b(insert|update|delete|merge|drop|alter|create|truncate|grant|revoke|copy|call|do|vacuum|analyze|lock|set|reset|refresh|listen|notify|prepare|execute|into|nextval|setval|set_config|pg_terminate_backend|pg_cancel_backend|pg_advisory_lock(?:_shared)?|pg_advisory_unlock(?:_shared|_all)?|lo_import|lo_export)\b/i;
-  const stripped = withoutStrings.replace(/"((?:[^"]|"")*)"/g, '$1');
-  const hit = stripped.match(banned);
-  if (hit) throw new Error(`reprobe refuses SQL containing "${hit[1]}"`);
+  if (s.split(/\r?\n/).some((line) => /^\s*\\/.test(line))) throw new Error('reprobe refuses psql meta-commands');
+
+  const tokens: string[] = [];
+  let lastStringWasEscape = false;
+  for (let i = 0; i < s.length;) {
+    if (/\s/.test(s[i])) { i++; continue; }
+    if (s.startsWith('--', i)) {
+      i += 2;
+      while (i < s.length && s[i] !== '\n' && s[i] !== '\r') i++;
+      // PostgreSQL accepts both LF and CR line endings; consume CRLF as one ending.
+      if (s[i] === '\r' && s[i + 1] === '\n') i += 2;
+      else if (i < s.length) i++;
+      continue;
+    }
+    if (s.startsWith('/*', i)) {
+      let depth = 1;
+      i += 2;
+      while (i < s.length && depth) {
+        if (s.startsWith('/*', i)) { depth++; i += 2; }
+        else if (s.startsWith('*/', i)) { depth--; i += 2; }
+        else i++;
+      }
+      if (depth) throw new Error('reprobe refuses unterminated SQL comments');
+      continue;
+    }
+    const startsQuotedString = s[i] === "'" || ((s[i] === 'e' || s[i] === 'E') && s[i + 1] === "'");
+    if (lastStringWasEscape && startsQuotedString) {
+      throw new Error('reprobe refuses newline-continued escape strings');
+    }
+    lastStringWasEscape = false;
+    let escapeString = false;
+    if ((s[i] === 'e' || s[i] === 'E') && s[i + 1] === "'") { escapeString = true; i++; }
+    if (s[i] === "'") {
+      i++;
+      let closed = false;
+      while (i < s.length) {
+        if (s[i] === "'" && s[i + 1] === "'") { i += 2; continue; }
+        if (s[i] === "'") { i++; closed = true; break; }
+        if (escapeString && s[i] === '\\') i++;
+        i++;
+      }
+      if (!closed) throw new Error('reprobe refuses unterminated SQL strings');
+      lastStringWasEscape = escapeString;
+      continue;
+    }
+    const dollar = s.slice(i).match(/^\$([A-Za-z_][A-Za-z0-9_]*|)\$/)?.[0];
+    if (dollar) {
+      const end = s.indexOf(dollar, i + dollar.length);
+      if (end < 0) throw new Error('reprobe refuses unterminated dollar-quoted SQL');
+      i = end + dollar.length;
+      continue;
+    }
+    if (s[i] === '$') throw new Error('reprobe refuses unrecognized dollar-quoted SQL');
+    if (/^u&"/i.test(s.slice(i, i + 3))) throw new Error('reprobe refuses Unicode-escaped identifiers');
+    if (s[i] === '"') {
+      i++;
+      let name = '';
+      let closed = false;
+      while (i < s.length) {
+        if (s[i] === '"' && s[i + 1] === '"') { name += '"'; i += 2; continue; }
+        if (s[i] === '"') { i++; closed = true; break; }
+        name += s[i++];
+      }
+      if (!closed) throw new Error('reprobe refuses unterminated quoted identifiers');
+      tokens.push(name.toLowerCase());
+      continue;
+    }
+    if (s[i] === ';') throw new Error('reprobe refuses multi-statement SQL');
+    if (s[i] === '\\') throw new Error('reprobe refuses psql meta-commands or escaped identifiers');
+    const word = s.slice(i).match(/^[A-Za-z_][A-Za-z0-9_$]*/)?.[0];
+    if (word) { tokens.push(word.toLowerCase()); i += word.length; continue; }
+    tokens.push(s[i++]);
+  }
+
+  const banned = new Set(['insert', 'update', 'delete', 'merge', 'drop', 'alter', 'create', 'truncate', 'grant', 'revoke', 'copy', 'call', 'do', 'vacuum', 'analyze', 'lock', 'set', 'reset', 'refresh', 'listen', 'notify', 'prepare', 'execute', 'into', 'nextval', 'setval', 'set_config', 'pg_terminate_backend', 'pg_cancel_backend', 'pg_logical_emit_message', 'pg_advisory_lock', 'pg_advisory_lock_shared', 'pg_advisory_unlock', 'pg_advisory_unlock_shared', 'pg_advisory_unlock_all', 'lo_import', 'lo_export']);
+  for (const token of tokens) {
+    if (banned.has(token) || token.startsWith('dblink') || token.startsWith('lo_') || token.startsWith('pg_advisory_') || token.startsWith('pg_try_advisory_') || token.startsWith('pg_stat_reset') || ['pg_notify', 'pg_read_file', 'pg_read_binary_file', 'pg_ls_dir', 'pg_stat_file', 'pg_reload_conf', 'pg_rotate_logfile', 'pg_create_restore_point'].includes(token)) {
+      throw new Error(`reprobe refuses SQL containing "${token}"`);
+    }
+  }
 }
 
 /** The exact script psql reads: every query runs inside a READ ONLY transaction that is rolled back. */
 export function readOnlyScript(sql: string): string {
   assertReadOnlySql(sql);
-  return `BEGIN TRANSACTION READ ONLY;\nSELECT coalesce(json_agg(t), '[]'::json) FROM (${sql}) t;\nROLLBACK;\n`;
+  return `BEGIN TRANSACTION READ ONLY;\nSELECT coalesce(json_agg(t), '[]'::json) FROM (${sql}\n) t;\nROLLBACK;\n`;
 }
 
 export function bindSql(sql: string, vars: Record<string, string>): string {

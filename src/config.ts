@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { run, type Runner } from './exec.ts';
 import { redactText } from './redact.ts';
 
@@ -58,6 +58,38 @@ const expand = (p: string, base: string) => {
   return isAbsolute(home) ? home : resolve(base, home);
 };
 
+function canonicalPath(p: string): string {
+  const abs = resolve(p);
+  if (existsSync(abs)) return realpathSync(abs);
+  const parent = dirname(abs);
+  return parent === abs ? abs : join(canonicalPath(parent), basename(abs));
+}
+
+function containingGitTop(path: string): string | null {
+  let cursor = canonicalPath(path);
+  while (!existsSync(cursor)) {
+    const parent = dirname(cursor);
+    if (parent === cursor) return null;
+    cursor = parent;
+  }
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: cursor, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Case evidence must not be written into the checkout, including through a symlink alias. */
+export function assertCasesOutsideRepo(casesPath: string, repoPath: string): void {
+  const cases = canonicalPath(casesPath);
+  const repo = canonicalPath(repoPath);
+  const rel = relative(repo, cases);
+  const inConfiguredRepo = rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+  if (inConfiguredRepo || containingGitTop(cases)) {
+    throw new Error(`case directory must be outside the repo (${casesPath})`);
+  }
+}
+
 function gitTop(cwd: string): string | null {
   try {
     return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null;
@@ -76,19 +108,18 @@ export function findConfigFile(flag?: string, cwd = process.cwd(), env = process
 }
 
 export function buildConfig(file: string | null, raw: FileConfig, cwd = process.cwd(), env = process.env): Config {
-  // Paths in the file are relative to the repo that holds .reprobe/, i.e. the config dir's parent.
-  const base = file ? dirname(dirname(file)) : cwd;
+  const base = file ? (basename(dirname(file)) === '.reprobe' ? dirname(dirname(file)) : dirname(file)) : cwd;
   const repo = raw.repo ? expand(raw.repo, base) : (gitTop(base) ?? base);
   const cacheDir = env.REPROBE_CACHE_DIR ? expand(env.REPROBE_CACHE_DIR, cwd) : join(homedir(), '.cache/reprobe');
   const sources = raw.sources ?? {};
+  const casesDir = join(env.REPROBE_CASES_DIR ? expand(env.REPROBE_CASES_DIR, cwd) : join(homedir(), '.reprobe/cases'), basename(repo));
   return {
     file,
     repo,
     reporter: env.REPROBE_REPORTER ?? raw.reporter,
     pack: raw.pack ? expand(raw.pack, file ? dirname(file) : cwd) : null,
     cacheDir,
-    // Cases hold production evidence: they live outside every repo so they are never committed.
-    casesDir: join(env.REPROBE_CASES_DIR ? expand(env.REPROBE_CASES_DIR, cwd) : join(homedir(), '.reprobe/cases'), basename(repo)),
+    casesDir,
     llmModel: env.REPROBE_LLM_MODEL ?? 'sonnet',
     sources: {
       ...sources,

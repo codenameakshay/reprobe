@@ -82,6 +82,18 @@ test('classify: two START markers, two FAIL markers, or PASS with FAIL are all b
   assert.equal(classify(0, `${passed}${failed}`, marker).outcome, 'broken');
 });
 
+test('classify: exactly one terminal marker is required across PASS and FAIL', () => {
+  assert.equal(classify(0, `${started}${marker}:FAIL\n${marker}:FAIL\n${marker}:PASS`, marker).outcome, 'broken');
+  assert.equal(classify(1, `${started}${marker}:PASS\n${marker}:PASS\n${marker}:FAIL`, marker).outcome, 'broken');
+  assert.equal(classify(0, `${started}${marker}:PASS\n${marker}:PASS`, marker).outcome, 'broken');
+  assert.equal(classify(1, `${started}${marker}:FAIL\n${marker}:FAIL`, marker).outcome, 'broken');
+});
+
+test('classify: terminal evidence before START is broken', () => {
+  assert.equal(classify(0, `${marker}:PASS\n${started}`, marker).outcome, 'broken');
+  assert.equal(classify(1, `${marker}:FAIL\n${started}`, marker).outcome, 'broken');
+});
+
 test('classify: an indented Jest assertion diff containing error-looking data is still fail', () => {
   const output = `${failed}FAIL src/example.spec.ts\n    expect(received).toEqual(expected) // deep equality\n\n    - Expected  - 1\n    + Received  + 1\n\n    - \"ReferenceError: recorded provider response\"\n    + \"safe message\"\nTest Suites: 1 failed`;
   assert.equal(classify(1, output, marker).outcome, 'fail');

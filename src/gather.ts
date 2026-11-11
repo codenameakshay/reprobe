@@ -26,7 +26,11 @@ export function parseIntent(text: string): Intent {
 export function anchorFromInput(input: Input): string | null {
   if (input.at) return new Date(input.at).toISOString();
   for (const s of [input.trace ?? '']) {
-    const m = decodeURIComponent(s).match(/(?:timestamp|start_time)=(\d{4}-\d\d-\d\dT[\d:.]+Z?)/);
+    let decoded = s;
+    try {
+      decoded = decodeURIComponent(s);
+    } catch {}
+    const m = decoded.match(/(?:timestamp|start_time)=(\d{4}-\d\d-\d\dT[\d:.]+Z?)/);
     if (m) return new Date(m[1].endsWith('Z') ? m[1] : `${m[1]}Z`).toISOString();
   }
   return null;
@@ -41,8 +45,12 @@ async function settle<T>(source: SourceStatus['source'], p: Promise<T>): Promise
   try {
     return await p;
   } catch (e) {
-    return { source, state: 'error', detail: (e as Error).message.slice(0, 300) };
+    return { source, state: 'error', detail: errorDetail(e) };
   }
+}
+
+function errorDetail(e: unknown): string {
+  return (e instanceof Error ? e.message : String(e)).slice(0, 300);
 }
 
 function take(r: { status: SourceStatus; evidence: Evidence[] } | SourceStatus, sources: SourceStatus[], evidence: Evidence[]) {
@@ -71,11 +79,15 @@ export async function gather(input: Input, pack: Pack | null, log: (s: string) =
   let anchor = anchorFromInput(input);
   const lfId = input.trace ? parseLangfuseTrace(input.trace) : null;
   const lsShare = input.trace && !lfId ? parseLangsmithShare(input.trace) : null;
-  const lf = await langfuseClient();
+  const lfResolution = await settle('langfuse', langfuseClient());
+  const lfFailed = lfResolution !== null && 'state' in lfResolution;
+  const lf = lfResolution === null || lfFailed ? null : lfResolution;
+  if (lfResolution !== null && 'state' in lfResolution) sources.push(lfResolution);
   if (lfId) {
     log(`fetching Langfuse trace ${lfId}`);
-    if (!lf) sources.push({ source: 'langfuse', state: 'missing-credentials', detail: config.sources.langfuse ? 'Langfuse keys did not resolve (reprobe doctor)' : 'no langfuse source in the config' });
-    else {
+    if (!lf) {
+      if (!lfFailed) sources.push({ source: 'langfuse', state: 'missing-credentials', detail: config.sources.langfuse ? 'Langfuse keys did not resolve (reprobe doctor)' : 'no langfuse source in the config' });
+    } else {
       const r = await settle('langfuse', fetchTrace(lf, lfId, pack?.observation));
       take(r, sources, evidence);
       if (!('state' in r)) {
@@ -100,8 +112,23 @@ export async function gather(input: Input, pack: Pack | null, log: (s: string) =
   const ctx: GatherCtx = { config, input, intent, window, subject, sources, evidence, pg, logIds: [], log, run };
 
   // 2. Who is this about? A pack knows the product's users; without one, --user and the reporter are taken as given.
-  if (pack?.resolveSubject) await pack.resolveSubject(ctx);
-  else {
+  let resolveSubjectFailed = false;
+  if (pack?.resolveSubject) {
+    const priorSubject = { ...subject, sessionIds: [...subject.sessionIds], traceIds: [...subject.traceIds] };
+    const priorLogIds = [...ctx.logIds];
+    try {
+      await pack.resolveSubject(ctx);
+    } catch (e) {
+      resolveSubjectFailed = true;
+      delete subject.userId;
+      delete subject.label;
+      delete subject.how;
+      Object.assign(subject, priorSubject);
+      ctx.logIds.splice(0, ctx.logIds.length, ...priorLogIds);
+      sources.push({ source: pack.name, state: 'error', detail: errorDetail(e) });
+    }
+  }
+  if (!pack?.resolveSubject || resolveSubjectFailed) {
     const reporter = input.reporter ?? config.reporter;
     if (input.user && !subject.userId) Object.assign(subject, { userId: input.user, how: '--user, taken as given' });
     else if (!subject.userId && reporter && !intent.aboutOther) Object.assign(subject, { userId: reporter, how: 'the reporter (first-person complaint)' });
@@ -122,7 +149,7 @@ export async function gather(input: Input, pack: Pack | null, log: (s: string) =
     try {
       await pack.gather(ctx);
     } catch (e) {
-      sources.push({ source: pack.name, state: 'error', detail: (e as Error).message.slice(0, 300) });
+      sources.push({ source: pack.name, state: 'error', detail: errorDetail(e) });
     }
   }
 
@@ -137,7 +164,7 @@ export async function gather(input: Input, pack: Pack | null, log: (s: string) =
         if (!('state' in r)) subject.traceIds.push(id);
       }
     }
-  } else if (!lf && !lfId && config.sources.langfuse) {
+  } else if (!lf && !lfId && config.sources.langfuse && !lfFailed) {
     sources.push({ source: 'langfuse', state: 'missing-credentials', detail: 'Langfuse keys did not resolve (reprobe doctor)' });
   }
 

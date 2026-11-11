@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { formatDoctorCheck } from '../src/cli.ts';
 import type { Gathered } from '../src/types.ts';
 
 const REPO = resolve(import.meta.dirname, '..');
 const T = '2026-09-08T17:16:00.000Z';
-const ORDER_ID = 'c111111111111111111111111';
+const ORDER_ID = 'order-example-1';
 const rawValues = [
   'privacy.person+case@example.com',
   '+1 415 555 2671',
@@ -31,12 +32,12 @@ function fixture(): Gathered {
         source: 'db',
         at: T,
         kind: 'order',
-        summary: `order ${ORDER_ID} "Groceries · INR 302 · 3 people" status EXPIRED; contact ${rawValues[0]} ${rawValues[1]}`,
+        summary: `order ${ORDER_ID} "Example group order · amount 302 · 3 participants" status EXPIRED; contact ${rawValues[0]} ${rawValues[1]}`,
         data: {
           id: ORDER_ID,
           status: 'EXPIRED',
           sessionId: 's1',
-          summary: 'Groceries · INR 302 · 3 people',
+          summary: 'Example group order · amount 302 · 3 participants',
           confirmedAt: null,
           rejectedAt: null,
           createdAt: T,
@@ -90,7 +91,7 @@ function analyze(caseDir: string): void {
 }
 
 test('analyze sanitizes saved evidence and generated artifacts, and is stable on rerun', () => {
-  const tempDir = mkdtempSync(join(REPO, 'test', '.privacy-'));
+  const tempDir = mkdtempSync(join(tmpdir(), 'reprobe-privacy-'));
   const caseDir = join(tempDir, 'case');
   try {
     mkdirSync(caseDir);

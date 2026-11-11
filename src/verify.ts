@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { appendFileSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { config, firstLine, type SetupStep } from './config.ts';
 import { run, type Runner } from './exec.ts';
@@ -27,6 +27,7 @@ export function assertSafeRelativePath(path: string, label: string): string {
 }
 
 export function assertSafeCheckoutPath(root: string, path: string): string {
+  if (path === '.') return realpathSync(root);
   assertSafeRelativePath(path, 'checkout');
   const canonicalRoot = realpathSync(root);
   let cursor = canonicalRoot;
@@ -80,8 +81,11 @@ export function assertSafeWorktreeLocation(repoPath: string, cachePath: string, 
 export const DEFAULT_RUNNERS = ['npx', 'npm', 'pnpm', 'yarn', 'bun', 'bunx', 'node', 'deno', 'flutter', 'dart', 'pytest', 'python', 'python3', 'uv', 'go', 'cargo', 'bundle', 'rspec', 'mvn', 'gradle', './gradlew', 'swift', 'dotnet', 'mix', 'php', 'vendor/bin/phpunit'];
 
 export function assertSafeReplay(replay: Replay, allow: string[] = config.verify.allow): void {
-  assertSafeRelativePath(replay.cwd, 'replay cwd');
-  for (const file of replay.files) assertSafeRelativePath(file.path, 'replay file');
+  if (replay.cwd !== '.') assertSafeRelativePath(replay.cwd, 'replay cwd');
+  for (const file of replay.files) {
+    assertSafeRelativePath(file.path, 'replay file');
+    if (file.path.split('/').some((part) => part.toLowerCase() === '.git')) throw new Error('replay file cannot target git metadata');
+  }
   for (const path of replay.requires) assertSafeRelativePath(path, 'required file');
   if (!replay.files.length) throw new Error('replay has no test file');
   if (!Array.isArray(replay.command) || !replay.command.length || replay.command.some((a) => typeof a !== 'string' || a.includes('\0'))) throw new Error('replay command must be a non-empty argv');
@@ -105,6 +109,10 @@ export function classify(code: number, output: string, marker?: string | null): 
   const hits = (phase: string) => lines.filter((line) => line === `${marker}:${phase}` || line.startsWith(`${marker}:${phase} `));
   const signal = (phase: string) => hits(phase).length === 1;
   if (!marker || !signal('START')) return { outcome: 'broken', detail: 'missing proof that the replay reached its assertions' };
+  const startIndex = lines.findIndex((line) => line === `${marker}:START` || line.startsWith(`${marker}:START `));
+  const terminalIndices = ['PASS', 'FAIL'].flatMap((phase) => lines.flatMap((line, index) => line === `${marker}:${phase}` || line.startsWith(`${marker}:${phase} `) ? [index] : []));
+  if (terminalIndices.length !== 1) return { outcome: 'broken', detail: 'replay must emit exactly one terminal marker' };
+  if (terminalIndices.some((index) => index < startIndex)) return { outcome: 'broken', detail: 'replay terminal marker appeared before START' };
   const passed = signal('PASS');
   const failed = signal('FAIL');
   if (code === 0) return passed && !failed ? { outcome: 'pass', detail: 'replay passed' } : { outcome: 'broken', detail: 'exit 0 without proof that the replay assertions passed' };
@@ -189,7 +197,8 @@ async function nodeModules(wt: string, dir: string, log: (s: string) => void, ru
   const prefix = dir === '.' || !dir ? '' : `${dir}/`;
   const lock = assertSafeCheckoutPath(wt, `${prefix}${lockName}`);
   const manifest = assertSafeCheckoutPath(wt, `${prefix}package.json`);
-  const hash = createHash('sha256').update(readFileSync(lock)).digest('hex').slice(0, 12);
+  const manifestContents = readFileSync(manifest);
+  const hash = createHash('sha256').update(readFileSync(lock)).update('\0').update(manifestContents).digest('hex').slice(0, 12);
   const depsPath = `deps/${(dir || 'root').replace(/[^A-Za-z0-9_-]/g, '_')}-${hash}`;
   const deps = assertSafeCheckoutPath(config.cacheDir, depsPath);
   const modules = assertSafeCheckoutPath(config.cacheDir, `${depsPath}/node_modules`);
@@ -201,16 +210,19 @@ async function nodeModules(wt: string, dir: string, log: (s: string) => void, ru
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
   }
-  if (linked && (!linked.isSymbolicLink() || !existsSync(linkedModules) || !existsSync(modules) || realpathSync(linkedModules) !== realpathSync(modules))) {
+  const linkedToExpectedModules = linked?.isSymbolicLink() && resolve(root, readlinkSync(linkedModules)) === resolve(modules);
+  if (linked && (!linkedToExpectedModules || (existsSync(linkedModules) && existsSync(modules) && realpathSync(linkedModules) !== realpathSync(modules)))) {
     throw new Error(`refusing ${prefix}node_modules outside the owned dependency cache`);
   }
-  if (!existsSync(done)) {
+  if (!existsSync(done) || !existsSync(modules)) {
     log(`installing dependencies for ${dir || '.'} lockfile ${hash} (one time, cached in ${deps})`);
     mkdirSync(deps, { recursive: true });
-    copyFileSync(manifest, assertSafeCheckoutPath(config.cacheDir, `${depsPath}/package.json`));
+    writeFileSync(assertSafeCheckoutPath(config.cacheDir, `${depsPath}/package.json`), manifestContents);
     copyFileSync(lock, assertSafeCheckoutPath(config.cacheDir, `${depsPath}/${lockName}`));
     const r = await runner(install[0], install.slice(1), { cwd: deps, timeoutMs: 1_200_000 });
     if (r.code !== 0) return `${install.join(' ')} failed: ${firstLine(r.stderr || r.stdout)}`;
+    // A successful install of a zero-dependency package may leave no directory to symlink.
+    mkdirSync(modules, { recursive: true });
     writeFileSync(done, `${new Date().toISOString()}\n`);
   }
   if (!linked) symlinkSync(modules, linkedModules);
@@ -229,10 +241,10 @@ async function setup(wt: string, steps: SetupStep[], replayCwd: string, log: (s:
       if (err) return err;
       continue;
     }
-    assertSafeRelativePath(step.cwd, 'setup cwd');
+    if (step.cwd !== '.') assertSafeRelativePath(step.cwd, 'setup cwd');
     const cwd = assertSafeCheckoutPath(wt, step.cwd);
     if (!existsSync(cwd)) continue;
-    log(`setup: ${step.run.join(' ')} in ${step.cwd}`);
+    log(`setup: ${redactText(step.run.join(' '))} in ${step.cwd}`);
     const r = await runner(step.run[0], step.run.slice(1), { cwd, timeoutMs: 900_000, env: { CI: '1' } });
     if (r.code !== 0) return `setup ${step.run.join(' ')} failed: ${firstLine(r.stderr || r.stdout)}`;
   }
@@ -242,25 +254,29 @@ async function setup(wt: string, steps: SetupStep[], replayCwd: string, log: (s:
 export async function verifyReplay(caseDir: string, replay: Replay, commits: string[], pack: Pack | null = null, log: (s: string) => void = () => {}, runner: Runner = run): Promise<VerifyResult[]> {
   assertSafeReplay(replay);
   const results: VerifyResult[] = [];
-  mkdirSync(join(caseDir, 'verify'), { recursive: true });
+  mkdirSync(assertSafeCheckoutPath(caseDir, 'verify'), { recursive: true });
   for (const commit of commits) {
     const rev = await git(['rev-parse', '--verify', '--end-of-options', `${commit}^{commit}`], config.repo, runner);
     const sha = rev.stdout.trim();
     const logId = /^[0-9a-f]{40,64}$/i.test(sha) ? sha.slice(0, 12) : createHash('sha256').update(commit).digest('hex').slice(0, 12);
-    const logFile = join(caseDir, 'verify', `${logId}.log`);
+    const logFile = assertSafeCheckoutPath(caseDir, `verify/${logId}.log`);
+    const record = (result: VerifyResult, contents = `${result.outcome}: ${result.detail}\n`) => {
+      writeFileSync(logFile, redactText(contents));
+      results.push(result);
+    };
     if (rev.code !== 0) {
-      results.push({ commit: redactText(commit), sha: '', outcome: 'broken', detail: redactText(`unknown commit ${commit}`), logFile });
+      record({ commit: redactText(commit), sha: '', outcome: 'broken', detail: redactText(`unknown commit ${commit}`), logFile });
       continue;
     }
     if (!/^[0-9a-f]{40,64}$/i.test(sha)) {
-      results.push({ commit: redactText(commit), sha: '', outcome: 'broken', detail: 'git returned an invalid commit id', logFile });
+      record({ commit: redactText(commit), sha: '', outcome: 'broken', detail: 'git returned an invalid commit id', logFile });
       continue;
     }
     log(`${redactText(commit)} (${sha.slice(0, 10)}): preparing worktree`);
     const wt = await worktree(sha, runner);
     const missing = replay.requires.filter((p) => !existsSync(join(wt, p)));
     if (missing.length) {
-      results.push({ commit, sha, outcome: 'not-applicable', detail: `missing at this commit: ${missing.join(', ')}`, logFile });
+      record({ commit, sha, outcome: 'not-applicable', detail: `missing at this commit: ${missing.join(', ')}`, logFile });
       continue;
     }
     for (const f of replay.files) {
@@ -273,14 +289,14 @@ export async function verifyReplay(caseDir: string, replay: Replay, commits: str
     let shimNote = '';
     const setupError = await setup(wt, config.verify.setup, replay.cwd, log, runner);
     if (setupError) {
-      results.push({ commit, sha, outcome: 'broken', detail: redactText(setupError), logFile });
+      record({ commit, sha, outcome: 'broken', detail: redactText(setupError), logFile });
       continue;
     }
     if (pack?.prepareWorktree) {
       const prepared = await pack.prepareWorktree(wt, replay, sha, { run: runner, git: (args, cwd = wt) => git(args, cwd, runner), safePath: assertSafeCheckoutPath, log });
       if (prepared.notes?.length) shimNote = ` [${prepared.notes.join('; ')}]`;
       if (prepared.error) {
-        results.push({ commit, sha, outcome: 'broken', detail: redactText(prepared.error + shimNote), logFile });
+        record({ commit, sha, outcome: 'broken', detail: redactText(prepared.error + shimNote), logFile });
         continue;
       }
       if (prepared.command) command = prepared.command;
@@ -289,9 +305,9 @@ export async function verifyReplay(caseDir: string, replay: Replay, commits: str
     log(`${redactText(commit)}: running ${redactText(command.join(' '))}`);
     const r = await runner(command[0], command.slice(1), { cwd, timeoutMs: 900_000, env: { CI: '1' } });
     const output = `${r.stdout}\n${r.stderr}`;
-    writeFileSync(logFile, redactText(`$ ${command.join(' ')}\n# commit ${sha}${shimNote}\n${output}`));
+    const logContents = redactText(`$ ${command.join(' ')}\n# commit ${sha}${shimNote}\n${output}`);
     const verdict = classify(r.code, output, replay.marker);
-    results.push({ commit: redactText(commit), sha, outcome: verdict.outcome, detail: redactText(verdict.detail + shimNote), logFile });
+    record({ commit: redactText(commit), sha, outcome: verdict.outcome, detail: redactText(verdict.detail + shimNote), logFile }, logContents);
   }
   return redactValue(results);
 }

@@ -29,6 +29,9 @@ const SCOPE_HINT = 'the sentry-cli token cannot read issues (an org CI token has
 
 /** Logged in is not enough: CI tokens authenticate but get 403 on issues. */
 export async function sentryReadState(runner: Runner = run): Promise<SourceStatus> {
+  if (config.sources.sentry && !config.sources.sentry.projects?.length) {
+    return { source: 'sentry', state: 'error', detail: 'no Sentry projects configured' };
+  }
   const auth = await sentryAuthState(runner);
   if (auth.state !== 'ok') return auth;
   const { org, projects } = config.sources.sentry!;
@@ -79,6 +82,9 @@ export async function gatherSentry(opts: {
   runner?: Runner;
 }): Promise<{ status: SourceStatus; evidence: Evidence[] }> {
   const runner = opts.runner ?? run;
+  if (config.sources.sentry && !config.sources.sentry.projects?.length) {
+    return { status: { source: 'sentry', state: 'error', detail: 'no Sentry projects configured' }, evidence: [] };
+  }
   const auth = await sentryAuthState(runner);
   if (auth.state !== 'ok') return { status: auth, evidence: [] };
   const { org: ORG, projects: PROJECTS, url } = config.sources.sentry!;
@@ -87,6 +93,7 @@ export async function gatherSentry(opts: {
   const cutoff = Date.parse(opts.window.from) - DAY_MS;
   const evidence: Evidence[] = [];
   const failures: string[] = [];
+  let successfulProjects = 0;
 
   for (const project of PROJECTS) {
     const r = await runner(
@@ -98,6 +105,7 @@ export async function gatherSentry(opts: {
       failures.push(/403|permission/i.test(r.stderr) ? SCOPE_HINT : redactText((r.stderr.split('\n')[0] ?? '').trim()) || `exit ${r.code}`);
       continue;
     }
+    successfulProjects++;
     for (const row of parseIssueTable(r.stdout, project)) {
       const ms = parseLastSeen(row.lastSeen);
       if (!opts.issue && (ms === null || ms < cutoff)) continue;
@@ -113,13 +121,13 @@ export async function gatherSentry(opts: {
     }
   }
 
-  if (failures.length === PROJECTS.length) {
+  if (successfulProjects === 0) {
     return { status: { source: 'sentry', state: failures[0] === SCOPE_HINT ? 'missing-credentials' : 'error', detail: failures[0] ?? 'sentry-cli failed' }, evidence: [] };
   }
   if (evidence.length === 0) {
-    return { status: { source: 'sentry', state: 'empty', detail: 'no matching issues' }, evidence };
+    return { status: { source: 'sentry', state: failures.length ? 'error' : 'empty', detail: failures.length ? `some project reads failed: ${failures.join('; ')}` : 'no matching issues' }, evidence };
   }
-  return { status: { source: 'sentry', state: 'ok', detail: `${evidence.length} issues` }, evidence };
+  return { status: { source: 'sentry', state: 'ok', detail: `${evidence.length} issues${failures.length ? `; some project reads failed: ${failures.join('; ')}` : ''}` }, evidence };
 }
 
 /** "2026-07-28 08:44:48.123 UTC" -> epoch ms, or null when it does not parse. */

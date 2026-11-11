@@ -234,6 +234,18 @@ test('gatherLogs reads a command source with {since} and {until} substituted and
   assert.equal(result.evidence[0].kind, 'log.error');
 });
 
+test('gatherLogs rejects an unsafe window before substituting it into command arguments', async () => {
+  setConfig(buildConfig(null, { sources: { logs: [{ name: 'shell-wrapper', command: ['sh', '-c', 'provider --since {since} --until {until}'] }] } }));
+  let calls = 0;
+  const out = await gatherLogs({ from: '2026-09-08T15:00:00Z; touch /tmp/nope', to: W.to }, [], async () => {
+    calls++;
+    return { code: 0, stdout: '', stderr: '' };
+  });
+  assert.equal(calls, 0);
+  assert.equal(out[0].status.state, 'error');
+  assert.match(out[0].status.detail, /invalid log window/);
+});
+
 test('gatherLogs reads a file source from the repo and keeps only relevant lines', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'reprobe-logs-'));
   try {
@@ -242,6 +254,22 @@ test('gatherLogs reads a file source from the repo and keeps only relevant lines
     const [result] = await gatherLogs(W, []);
     assert.equal(result.status.state, 'ok');
     assert.match(result.status.detail, /^local: 1 relevant lines from 1 file\(s\)/);
+    assert.equal(result.evidence.length, 1);
+    assert.equal(result.evidence[0].summary, 'disk full');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('gatherLogs isolates a directory matched by a file glob and retains readable files', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reprobe-logs-'));
+  try {
+    writeFileSync(join(dir, 'api.log'), '2026-09-08T16:30:00.000Z [error] disk full\n');
+    mkdirSync(join(dir, 'nested'));
+    setConfig(buildConfig(null, { repo: dir, sources: { logs: [{ name: 'local', file: '*' }] } }));
+    const [result] = await gatherLogs(W, []);
+    assert.equal(result.status.state, 'ok');
+    assert.match(result.status.detail, /failed: nested:/);
     assert.equal(result.evidence.length, 1);
     assert.equal(result.evidence[0].summary, 'disk full');
   } finally {

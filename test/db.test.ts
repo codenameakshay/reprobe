@@ -7,6 +7,7 @@ test('assertReadOnlySql accepts plain and quoted read-only SELECTs', () => {
   assert.doesNotThrow(() => assertReadOnlySql('SELECT 1'));
   assert.doesNotThrow(() => assertReadOnlySql('WITH x AS (SELECT 1) SELECT * FROM x'));
   assert.doesNotThrow(() => assertReadOnlySql(`SELECT "updatedAt" FROM "User" WHERE name = 'delete me'`));
+  assert.doesNotThrow(() => assertReadOnlySql('SELECT 1 /* delete; update; set_config() */ -- copy\n'));
 });
 
 test('assertReadOnlySql refuses writes and multi-statement SQL', () => {
@@ -24,10 +25,102 @@ test('assertReadOnlySql refuses psql meta-commands embedded in an otherwise read
   assert.throws(() => assertReadOnlySql('SELECT 1 \\! touch /tmp/reprobe-write'), /psql|meta-command/i);
 });
 
+test('assertReadOnlySql sees executable SQL after comments and across quote forms', () => {
+  assert.throws(() => assertReadOnlySql('SELECT 1 /* harmless */; DROP TABLE x'));
+  assert.throws(() => assertReadOnlySql("SELECT E'\\\\'; DROP TABLE x; --'"));
+  assert.throws(() => assertReadOnlySql('SELECT $$safe$$; DROP TABLE x'));
+  assert.throws(() => assertReadOnlySql('WITH x AS (SELECT 1) /* gap */ DELETE FROM t'));
+  assert.throws(() => assertReadOnlySql('SELECT 1 -- comment\n; DROP TABLE x'));
+});
+
+test('assertReadOnlySql ends line comments on CR, LF, and CRLF', () => {
+  for (const newline of ['\r', '\n', '\r\n']) {
+    assert.throws(
+      () => assertReadOnlySql(`SELECT 1 -- comment${newline}; COMMIT; SET default_transaction_read_only=off; DELETE FROM t`),
+      /multi-statement|commit|set|delete/i,
+    );
+  }
+});
+
+test('Pg.query rejects CR-terminated comment injection before invoking its runner', async () => {
+  let calls = 0;
+  const db = new Pg('postgres://u:p@h:5432/d', async () => {
+    calls++;
+    return { code: 0, stdout: '[]', stderr: '' };
+  });
+  await assert.rejects(
+    db.query('SELECT 1) t --comment\r; COMMIT; SET default_transaction_read_only=off; DELETE FROM t; SELECT 1 --'),
+    /multi-statement|commit|set|delete/i,
+  );
+  assert.equal(calls, 0);
+});
+
+test('assertReadOnlySql rejects newline-continued escape strings and logical decoding side effects', () => {
+  assert.doesNotThrow(() => assertReadOnlySql("SELECT E'plain\\\\string'"));
+  assert.throws(() => assertReadOnlySql("SELECT E'first'\n'second'"), /continued escape strings/i);
+  assert.throws(() => assertReadOnlySql("SELECT E'first'\n'\\\\' plus suffix"), /continued escape strings/i);
+  assert.throws(() => assertReadOnlySql("SELECT pg_logical_emit_message(true, 'prefix', 'message')"));
+});
+
+test('assertReadOnlySql rejects unrecognized Unicode dollar-quote tags', () => {
+  for (const tag of ['é', '高']) {
+    assert.throws(
+      () => assertReadOnlySql(`SELECT $${tag}$' $${tag}$; DELETE FROM t`),
+      /unrecognized dollar-quoted SQL/i,
+    );
+  }
+});
+
+test('assertReadOnlySql rejects write operations in CTEs', () => {
+  assert.throws(() => assertReadOnlySql('WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x'));
+});
+
+test('assertReadOnlySql rejects known side-effect function families', () => {
+  assert.throws(() => assertReadOnlySql("SELECT dblink_exec('host', 'DELETE FROM t')"));
+  assert.throws(() => assertReadOnlySql("SELECT dblink('host', 'DELETE FROM t RETURNING *')"));
+  assert.throws(() => assertReadOnlySql("SELECT pg_read_file('/etc/passwd')"));
+  assert.throws(() => assertReadOnlySql("SELECT lo_import('/tmp/file')"));
+  assert.throws(() => assertReadOnlySql('SELECT pg_notify(\'channel\', \'payload\')'));
+  assert.throws(() => assertReadOnlySql('SELECT pg_advisory_xact_lock(1)'));
+  assert.throws(() => assertReadOnlySql('SELECT pg_try_advisory_lock(1)'));
+  assert.throws(() => assertReadOnlySql("SELECT set_config('x', 'y', false)"));
+  assert.throws(() => assertReadOnlySql("SELECT 'unterminated"));
+  assert.throws(() => assertReadOnlySql('SELECT 1 /* unterminated'));
+  assert.throws(() => assertReadOnlySql('SELECT $$unterminated'));
+});
+
+test('Pg.query rejects nontransactional administrative functions before invoking psql', async () => {
+  let calls = 0;
+  const db = new Pg('postgres://u:p@h:5432/d', async () => {
+    calls++;
+    return { code: 0, stdout: '[]', stderr: '' };
+  });
+  for (const sql of [
+    'SELECT pg_stat_reset()',
+    "SELECT pg_stat_reset_shared('bgwriter')",
+    'SELECT pg_stat_reset_single_table_counters(123)',
+    'SELECT pg_reload_conf()',
+    'SELECT pg_rotate_logfile()',
+    "SELECT pg_create_restore_point('reprobe')",
+  ]) {
+    await assert.rejects(db.query(sql), /refuses SQL/);
+  }
+  assert.equal(calls, 0);
+});
+
+test('assertReadOnlySql detects psql commands even when SQL comments precede them', () => {
+  assert.throws(() => assertReadOnlySql('SELECT 1\n-- comment\n\\! touch /tmp/reprobe-write'));
+  assert.throws(() => assertReadOnlySql('SELECT 1\n/* comment */\n\\copy t from /tmp/x'));
+});
+
 test('readOnlyScript wraps the query in a read-only transaction that is rolled back', () => {
   const script = readOnlyScript('SELECT 1');
   assert.ok(script.startsWith('BEGIN TRANSACTION READ ONLY;'));
   assert.ok(script.endsWith('ROLLBACK;\n'));
+});
+
+test('readOnlyScript ends a trailing SQL line comment before closing its wrapper', () => {
+  assert.match(readOnlyScript('SELECT 1 -- note'), /SELECT 1 -- note\n\) t;/);
 });
 
 test('pgEnv maps a connection URL to libpq variables', () => {
