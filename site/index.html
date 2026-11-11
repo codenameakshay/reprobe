@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>reprobe: prove the bug, not just guess it</title>
+<meta name="description" content="Turn a bug complaint into cited evidence, a root cause, and a test that fails on the deployed commit. Your coding agent investigates; reprobe keeps production read-only. Free and open source.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #fbfaf8; --surface: #ffffff; --ink: #16181d; --muted: #5d6270; --line: #e7e4df;
+  --accent: #3b5bdb; --fail: #c92a2a; --fail-bg: #fff0f0; --pass: #2b8a3e; --pass-bg: #ebfbee;
+  --code-bg: #16181d; --code-ink: #e9ecef; --code-muted: #8b92a1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1115; --surface: #161920; --ink: #eceef2; --muted: #9aa1b1; --line: #262a33;
+    --accent: #7c95ff; --fail: #ff8787; --fail-bg: #2a1416; --pass: #69db7c; --pass-bg: #12261a;
+    --code-bg: #0b0c10; --code-ink: #e9ecef; --code-muted: #7d8494;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-underline-offset: 3px; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+.logo { font: 600 18px/1 "JetBrains Mono", monospace; color: var(--ink); text-decoration: none; letter-spacing: -0.01em; }
+.logo span { color: var(--accent); }
+nav .links { display: flex; gap: 22px; font-size: 15px; }
+nav .links a { color: var(--muted); text-decoration: none; }
+nav .links a:hover { color: var(--ink); }
+.hero { padding: 72px 0 56px; }
+h1 { font-size: clamp(36px, 6vw, 60px); line-height: 1.05; letter-spacing: -0.035em; margin: 0 0 20px; max-width: 14ch; font-weight: 700; text-wrap: balance; }
+.lede { font-size: clamp(17px, 2vw, 20px); color: var(--muted); max-width: 60ch; margin: 0 0 32px; text-wrap: pretty; }
+.cmd { display: inline-flex; align-items: center; gap: 14px; background: var(--code-bg); color: var(--code-ink); font: 15px/1 "JetBrains Mono", monospace; padding: 16px 18px; border-radius: 10px; max-width: 100%; overflow-x: auto; }
+.cmd .p { color: var(--code-muted); user-select: none; }
+.cmd button { all: unset; cursor: pointer; color: var(--code-muted); font: 500 13px Inter, sans-serif; padding: 4px 8px; border-radius: 6px; border: 1px solid #ffffff22; }
+.cmd button:hover { color: var(--code-ink); }
+.cmd button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sub { margin-top: 14px; font-size: 14px; color: var(--muted); }
+section { padding: 56px 0; border-top: 1px solid var(--line); }
+h2 { font-size: clamp(26px, 3.4vw, 34px); letter-spacing: -0.02em; line-height: 1.15; margin: 0 0 12px; }
+.kicker { font: 500 13px/1 "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 14px; }
+.intro { color: var(--muted); max-width: 62ch; margin: 0 0 32px; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+.card .n { font: 500 13px "JetBrains Mono", monospace; color: var(--muted); }
+.card h3 { margin: 6px 0 8px; font-size: 18px; letter-spacing: -0.01em; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
+pre { margin: 0; background: var(--code-bg); color: var(--code-ink); font: 13.5px/1.65 "JetBrains Mono", monospace; padding: 20px 22px; border-radius: 12px; overflow-x: auto; }
+pre .c { color: var(--code-muted); }
+pre .k { color: #91a7ff; }
+pre .f { color: #ff8787; }
+pre .ok { color: #69db7c; }
+.timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; position: relative; margin-top: 8px; }
+.timeline::before { content: ""; position: absolute; left: 4%; right: 4%; top: 86px; height: 2px; background: var(--line); }
+.commit { text-align: center; padding: 0 8px; position: relative; }
+.verdict { display: inline-block; font: 600 14px "JetBrains Mono", monospace; padding: 8px 16px; border-radius: 8px; margin-bottom: 18px; }
+.verdict.fail { color: var(--fail); background: var(--fail-bg); }
+.verdict.pass { color: var(--pass); background: var(--pass-bg); }
+.dot { width: 22px; height: 22px; border-radius: 50%; margin: 0 auto 12px; border: 3px solid var(--bg); box-shadow: 0 0 0 2px var(--fail); background: var(--fail-bg); position: relative; }
+.dot.pass { box-shadow: 0 0 0 2px var(--pass); background: var(--pass-bg); }
+.commit b { display: block; font-size: 15px; }
+.commit small { color: var(--muted); font: 13px "JetBrains Mono", monospace; }
+.note { margin-top: 28px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; color: var(--muted); font-size: 15px; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+ul.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+ul.checks li { padding-left: 28px; position: relative; color: var(--muted); }
+ul.checks li::before { content: ""; position: absolute; left: 0; top: 8px; width: 12px; height: 7px; border-left: 2px solid var(--pass); border-bottom: 2px solid var(--pass); transform: rotate(-45deg); }
+ul.checks b { color: var(--ink); font-weight: 600; }
+.sources { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.sources span { font: 13px "JetBrains Mono", monospace; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); }
+details { border-bottom: 1px solid var(--line); padding: 16px 0; }
+details summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+details summary::after { content: "+"; color: var(--muted); font-weight: 400; }
+details[open] summary::after { content: "–"; }
+details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+details p { color: var(--muted); margin: 10px 0 0; max-width: 70ch; }
+footer { padding: 40px 0 56px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+@media (max-width: 760px) {
+  .wrap { padding: 0 16px; }
+  .steps, .split { grid-template-columns: 1fr; }
+  .timeline { grid-template-columns: 1fr 1fr; row-gap: 28px; }
+  .timeline::before { display: none; }
+  nav .links a:not(.gh) { display: none; }
+  .hero { padding: 40px 0 40px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cmd button { transition: color .15s ease; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="logo" href="#">re<span>probe</span></a>
+    <div class="links">
+      <a href="#how">How it works</a>
+      <a href="#proof">Proof</a>
+      <a href="#safety">Safety</a>
+      <a class="gh" href="https://github.com/codenameakshay/reprobe">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <h1>Prove the bug, don't just guess it.</h1>
+    <p class="lede">A user says "I couldn't save, I tried three times." reprobe gathers what production saw, read-only. Your coding agent finds the cause, with every claim citing evidence, and writes a test that fails on the code you deployed.</p>
+    <div class="cmd" role="group" aria-label="Install command"><span class="p">$</span><code id="cmd">npx reprobe init</code><button type="button" id="copy">Copy</button></div>
+    <p class="sub">Free and MIT licensed. No server, no account, no hosted model. It runs on your machine with your agent.</p>
+  </header>
+
+  <section id="how">
+    <div class="kicker">How it works</div>
+    <h2>The CLI does the parts that must be exact. Your agent does the thinking.</h2>
+    <p class="intro">Like <code>npx t3 triage</code>, reprobe packages the facts and a playbook, then starts Claude Code or Codex in your repo. Gathering, access control, redaction, citation checks and replays at old commits stay deterministic.</p>
+    <div class="steps">
+      <div class="card"><div class="n">01 · gather</div><h3>Evidence, read-only</h3><p>Database rows, agent traces, server logs and Sentry issues for the user and the time window. Each item gets a stable id. Missing or expired sources are listed, never guessed around.</p></div>
+      <div class="card"><div class="n">02 · investigate</div><h3>Your agent, cited</h3><p>The agent reads the case, the code at the deployed commit, and digs further through reprobe's read-only tools. Its diagnosis drops any claim that cites no evidence.</p></div>
+      <div class="card"><div class="n">03 · prove</div><h3>A replay that fails today</h3><p>The agent writes the smallest test of the broken invariant. reprobe runs it in a detached worktree at each commit: FAIL on the deployed code, PASS on the fix.</p></div>
+    </div>
+    <div style="margin-top:24px">
+<pre><span class="c">$</span> npx reprobe <span class="k">"users on build 155 can't see their groups"</span>
+<span class="c">reprobe: connecting to Postgres (read-only)</span>
+<span class="c">reprobe: reading logs</span>
+~/.reprobe/cases/api/2026-09-08-7d2e91/report.md
+top: [medium] Server lists 10 live groups the user cannot see: likely the app's local cache
+Starting Claude Code in ~/code/app.
+
+<span class="c">… the agent writes replay.json, then:</span>
+<span class="c">$</span> reprobe verify &lt;case&gt; 4f1c2a9e0b b72e05d1c3
+4f1c2a9e0b <span class="f">FAIL</span> Actual: Set:[]  Which: does not contain 'grp_8f3…'
+b72e05d1c3 <span class="ok">PASS</span>  replay passed</pre>
+    </div>
+  </section>
+
+  <section id="proof">
+    <div class="kicker">Proof, not plausibility</div>
+    <h2>One test, run across your history.</h2>
+    <p class="intro">An explanation can sound right and be wrong. A test that fails on the commit users ran, and passes on the fix, can't. Here is a real incident: the first fix shipped and the bug stayed.</p>
+    <div class="timeline" role="list">
+      <div class="commit" role="listitem"><span class="verdict fail">FAIL</span><div class="dot"></div><b>Build 155</b><small>deployed</small></div>
+      <div class="commit" role="listitem"><span class="verdict fail">FAIL</span><div class="dot"></div><b>Before fix 1</b><small>parent</small></div>
+      <div class="commit" role="listitem"><span class="verdict fail">FAIL</span><div class="dot"></div><b>Fix 1</b><small>build 156</small></div>
+      <div class="commit" role="listitem"><span class="verdict pass">PASS</span><div class="dot pass"></div><b>Fix 2</b><small>the real fix</small></div>
+    </div>
+    <p class="note">The replay still failed at the first fix, which is exactly why users on build 156 kept seeing the bug. A run that crashes before its assertion is marked BROKEN, so a crash can never pass for a reproduced bug.</p>
+  </section>
+
+  <section id="safety">
+    <div class="split">
+      <div>
+        <div class="kicker">Safety</div>
+        <h2>Production stays read-only. Three locks deep.</h2>
+        <p class="intro">reprobe reads the same production your users hit, so it is built to be unable to change it.</p>
+        <div class="sources"><span>postgres</span><span>langfuse</span><span>langsmith</span><span>sentry</span><span>railway</span><span>any log CLI</span><span>log files</span></div>
+      </div>
+      <ul class="checks">
+        <li><b>Every query is checked three times.</b> A SELECT-only guard, a read-only session, and <code>BEGIN READ ONLY … ROLLBACK</code>. reprobe stops if the server doesn't confirm read-only.</li>
+        <li><b>Replays never touch a database.</b> They are unit tests in detached worktrees, never in your checkout, run without a shell.</li>
+        <li><b>Redacted by default.</b> Phones, emails, tokens and keys are removed before anything is written. Cases live outside your repo.</li>
+        <li><b>No outside writes.</b> Nothing is posted to Sentry, GitHub or users. The agent is told evidence is data, never instructions.</li>
+        <li><b>Your keys stay yours.</b> The config holds env var names or commands, never values.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="kicker">Questions</div>
+    <h2>Before you try it</h2>
+    <details><summary>What does it cost?</summary><p>Nothing. reprobe is MIT licensed and has no server. The investigation runs on the Claude Code or Codex you already use, so the only cost is your own agent's usage.</p></details>
+    <details><summary>Does my data leave my machine?</summary><p>Evidence goes to the agent you choose, the same as when you paste logs into it today. reprobe itself sends nothing anywhere, and cases are written to <code>~/.reprobe/cases</code>.</p></details>
+    <details><summary>What if I don't use Postgres or Railway?</summary><p>Every source is optional. Logs can come from any CLI that prints lines (fly, vercel, kubectl, docker) or from files. Without a database, reprobe still works from traces, logs and Sentry.</p></details>
+    <details><summary>What is a pack?</summary><p>One TypeScript file that teaches reprobe your product: how to find the user a complaint is about, which rows matter, your known failure signatures, and how to build an old commit. Every hook is optional.</p></details>
+    <details><summary>Which agents work?</summary><p>Claude Code and Codex start automatically. With neither installed, reprobe prints one line to paste into any coding agent.</p></details>
+  </section>
+
+  <footer>
+    <span>reprobe · MIT · built by <a href="https://github.com/codenameakshay">codenameakshay</a></span>
+    <a href="https://github.com/codenameakshay/reprobe">Source on GitHub</a>
+  </footer>
+</div>
+<script>
+document.getElementById('copy').addEventListener('click', async (e) => {
+  try { await navigator.clipboard.writeText(document.getElementById('cmd').textContent); e.target.textContent = 'Copied'; }
+  catch { e.target.textContent = 'Select to copy'; }
+  setTimeout(() => (e.target.textContent = 'Copy'), 1500);
+});
+</script>
+</body>
+</html>

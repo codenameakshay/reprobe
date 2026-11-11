@@ -1,0 +1,36 @@
+{
+  "name": "reprobe",
+  "version": "0.1.0",
+  "description": "Turn a bug complaint into cited evidence, a root cause, and a replay test that fails on the deployed commit. Your coding agent investigates; reprobe keeps production read-only.",
+  "license": "MIT",
+  "author": "codenameakshay",
+  "type": "module",
+  "bin": {
+    "reprobe": "bin/reprobe.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "PLAYBOOK.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "exports": {
+    "./types": {
+      "types": "./dist/types.d.ts"
+    }
+  }
+}
