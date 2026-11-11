@@ -10,7 +10,6 @@
 <meta property="og:type" content="website">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23FFE15A'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11' stroke='%23172033' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<script>document.documentElement.classList.add("js")</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -89,9 +88,9 @@ h1 { font-size: clamp(46px, 6.6vw, 78px); line-height: .98; letter-spacing: -.01
 .complaint { font-size: 17px; }
 .ev { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.45; }
 .ev li { display: grid; grid-template-columns: 19ch 1fr; gap: 12px; align-items: baseline; }
-.ev .id { font: 12.5px/1.45 var(--mono); color: var(--muted); white-space: nowrap; }
+.ev .id { font: 12.5px/1.45 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .claim { font-size: 15px; line-height: 1.55; }
-.cite { font: 12px/1 var(--mono); color: var(--hl-ink); position: relative; isolation: isolate; padding: 3px 5px; margin-left: 2px; white-space: nowrap; }
+.cite { display: inline-block; max-width: 100%; font: 12px/1.45 var(--mono); color: var(--hl-ink); position: relative; isolation: isolate; padding: 3px 5px; margin-left: 2px; overflow-wrap: anywhere; }
 .cite::before, .ev .hit::before { content: ""; position: absolute; inset: 0; background: var(--hl); border-radius: 4px; z-index: -1; transform-origin: left center; }
 .ev .hit { position: relative; isolation: isolate; color: var(--hl-ink); padding: 1px 4px; margin-left: -4px; }
 .runs { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -113,11 +112,11 @@ h1 { font-size: clamp(46px, 6.6vw, 78px); line-height: .98; letter-spacing: -.01
 @keyframes hide { to { opacity: 0; } }
 @keyframes stamp { from { opacity: 0; transform: scale(.92); } }
 @media (prefers-reduced-motion: no-preference) {
-  .case.in .s { animation: rise 320ms var(--ease-out) var(--d) both; }
-  .case.in .cite::before, .case.in .ev .hit::before { animation: sweep 380ms var(--ease-out) var(--d) both; }
-  .case.in .pending { animation: show 1ms linear var(--d) both, hide 120ms ease-out var(--t) forwards; }
-  .case.in .status .stamp { animation: stamp 220ms var(--ease-out) var(--t) both; }
-  .case.in .runs .why { animation: rise 260ms var(--ease-out) calc(var(--t) + 60ms) both; }
+  .js .case.in .s { animation: rise 320ms var(--ease-out) var(--d) both; }
+  .js .case.in .cite::before, .js .case.in .ev .hit::before { animation: sweep 380ms var(--ease-out) var(--d) both; }
+  .js .case.in .pending { animation: show 1ms linear var(--d) both, hide 120ms ease-out var(--t) forwards; }
+  .js .case.in .status .stamp { animation: stamp 220ms var(--ease-out) var(--t) both; }
+  .js .case.in .runs .why { animation: rise 260ms var(--ease-out) calc(var(--t) + 60ms) both; }
 }
 @media (prefers-reduced-motion: reduce) {
   .again { display: none; }
@@ -236,33 +235,33 @@ pre .c { color: var(--code-muted); }
   /* the guess loop goes round once, then the way back turns red */
   .js .loop:not(.in) li { opacity: .28; }
   .js .loop:not(.in) li::after, .js .loop:not(.in) + .back { opacity: 0; }
-  .loop.in li { animation: lit 360ms var(--ease-out) var(--t) both; }
-  .loop.in li::after { animation: rise 260ms var(--ease-out) calc(var(--t) + 260ms) both; }
-  .loop.in + .back { animation: rise 300ms var(--ease-out) 1900ms both; }
+  .js .loop.in li { animation: lit 360ms var(--ease-out) var(--t) both; }
+  .js .loop.in li::after { animation: rise 260ms var(--ease-out) calc(var(--t) + 260ms) both; }
+  .js .loop.in + .back { animation: rise 300ms var(--ease-out) 1900ms both; }
 
   /* proof: the replay runs across history, commit by commit */
   .js .rail:not(.in) .stamp, .js .rail:not(.in) .commit p, .js .rail:not(.in) .dot::after { opacity: 0; }
   .js .rail:not(.in) .commit .seg { transform: scaleX(0); }
   .commit .seg { transform-origin: left center; }
-  .rail.in .dot::after { animation: pop 240ms var(--ease-out) calc(var(--t) + 120ms) both; }
-  .rail.in .stamp { animation: stamp 240ms var(--ease-out) calc(var(--t) + 220ms) both; }
-  .rail.in .commit p { animation: rise 300ms var(--ease-out) calc(var(--t) + 300ms) both; }
-  .rail.in .commit .seg { animation: growx 360ms var(--ease-out) calc(var(--t) + 340ms) backwards; }
+  .js .rail.in .dot::after { animation: pop 240ms var(--ease-out) calc(var(--t) + 120ms) both; }
+  .js .rail.in .stamp { animation: stamp 240ms var(--ease-out) calc(var(--t) + 220ms) both; }
+  .js .rail.in .commit p { animation: rise 300ms var(--ease-out) calc(var(--t) + 300ms) both; }
+  .js .rail.in .commit .seg { animation: growx 360ms var(--ease-out) calc(var(--t) + 340ms) backwards; }
 
   /* safety: the layers close in around the query */
-  .layers.in .layer, .layers.in .query { animation: rise 320ms var(--ease-out) both; }
-  .layers.in .l2 { animation-delay: 120ms; } .layers.in .l3 { animation-delay: 240ms; } .layers.in .query { animation-delay: 380ms; }
+  .js .layers.in .layer, .js .layers.in .query { animation: rise 320ms var(--ease-out) both; }
+  .js .layers.in .l2 { animation-delay: 120ms; } .js .layers.in .l3 { animation-delay: 240ms; } .js .layers.in .query { animation-delay: 380ms; }
 
   /* faq: answers ease in when opened */
-  .faq details[open] p { animation: rise 240ms var(--ease-out) both; }
+  .js .faq details[open] p { animation: rise 240ms var(--ease-out) both; }
 }
 @media (prefers-reduced-motion: reduce) { .rerun { display: none; } }
 
 /* how it works: the lifeline fills as you read, and steps ahead stay quiet */
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
-    .seq::after { content: ""; position: absolute; left: calc(50% - 1px); top: 0; bottom: 0; width: 2px; background: var(--ink); transform-origin: top; animation: growy linear both; animation-timeline: view(); animation-range: cover 40vh cover calc(100% - 60vh); }
-    .seq .body { animation: focus linear both; animation-timeline: view(); animation-range: cover 20vh cover 38vh; }
+    .js .seq::after { content: ""; position: absolute; left: calc(50% - 1px); top: 0; bottom: 0; width: 2px; background: var(--ink); transform-origin: top; animation: growy linear both; animation-timeline: view(); animation-range: cover 40vh cover calc(100% - 60vh); }
+    .js .seq .body { animation: focus linear both; animation-timeline: view(); animation-range: cover 20vh cover 38vh; }
   }
 }
 
@@ -308,7 +307,7 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
   .loop li:nth-child(4)::after { bottom: calc(100% + 9px); }
   .back { left: calc(25% + 14px); font-size: 12px; }
   .fit { grid-template-columns: minmax(0, 1fr); }
-  .seq::after { left: 15px; }
+  .js .seq::after { left: 15px; }
   .seq code.line, .query { white-space: normal; overflow-wrap: anywhere; }
   .rail { grid-template-columns: minmax(0, 1fr); }
   .commit { padding: 0 0 32px 44px; }
@@ -323,7 +322,7 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
 @media (max-width: 760px) and (prefers-reduced-motion: no-preference) {
   .commit .seg { transform-origin: top center; }
   .js .rail:not(.in) .commit .seg { transform: scaleY(0); }
-  .rail.in .commit .seg { animation-name: growy; }
+  .js .rail.in .commit .seg { animation-name: growy; }
 }
 </style>
 </head>
@@ -358,26 +357,26 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
       <p class="fine">Free and MIT licensed. No server, no account, no hosted model. It runs on your machine with Claude Code or Codex.</p>
     </div>
 
-    <figure class="case in" id="case" style="margin:0" aria-label="Example case: a complaint turned into evidence, a cited root cause and replay verdicts">
-      <div class="case-head"><span>~/.reprobe/cases/app/2026-10-14-a71c3e</span><button type="button" class="again" data-replay="case">Replay</button></div>
+    <figure class="case in" id="case" style="margin:0" aria-label="Synthetic example case: a complaint turned into evidence, a cited root cause and replay verdicts">
+      <div class="case-head"><span>Synthetic example · case/report.md</span><button type="button" class="again" data-replay="case">Replay</button></div>
       <div class="case-body">
         <div class="blk s" style="--d:80ms"><b>Complaint</b><p class="complaint">“I couldn't save, I tried three times.”</p></div>
         <div class="blk">
           <b class="s" style="--d:300ms">Evidence</b>
           <ul class="ev">
-            <li class="s" style="--d:380ms"><span class="id">query:3b7e10c9a2</span><span>Drafts saved by <span class="mono">u_7f2</span> since 09:00: 0 rows</span></li>
-            <li class="s" style="--d:460ms"><span class="id"><span class="hit" style="--d:1280ms">logs:…:9f04d2b6e1</span></span><span>POST /drafts 409, duplicate key, 3 times</span></li>
-            <li class="s" style="--d:540ms"><span class="id"><span class="hit" style="--d:1380ms">sentry:api:API-4K2</span></span><span>UniqueViolation on drafts_idem_key</span></li>
+            <li class="s" style="--d:380ms"><span class="id">query:aaaaaaaaaa</span><span>Drafts saved by <span class="mono">synthetic-user</span> since 09:00: 0 rows</span></li>
+            <li class="s" style="--d:460ms"><span class="id"><span class="hit" style="--d:1280ms">logs:2026-10-14T09:15:00.000Z:bbbbbbbbbb</span></span><span>POST /drafts 409, stale key from an earlier draft, 3 times</span></li>
+            <li class="s" style="--d:540ms"><span class="id"><span class="hit" style="--d:1380ms">sentry:example:EXAMPLE-1</span></span><span>UniqueViolation on drafts_idem_key</span></li>
           </ul>
         </div>
         <div class="blk s" style="--d:820ms"><b>Root cause</b>
-          <p class="claim">Every retry resends the first attempt's idempotency key. The first attempt never committed, so each retry is rejected as a duplicate. <span class="cite" style="--d:1120ms">logs:…9f04</span> <span class="cite" style="--d:1220ms">sentry:API-4K2</span></p>
+          <p class="claim">Every attempt resends a stale idempotency key from an earlier draft, so each is rejected as a duplicate. No new draft is saved. <span class="cite" style="--d:1120ms">query:aaaaaaaaaa</span> <span class="cite" style="--d:1220ms">logs:2026-10-14T09:15:00.000Z:bbbbbbbbbb</span></p>
         </div>
         <div class="blk">
           <b class="s" style="--d:1560ms">Replay</b>
           <ul class="runs">
-            <li class="s" style="--d:1640ms;--t:2080ms"><span class="sha">e4b1907</span><span class="what">deployed</span><span class="status"><span class="pending">running</span><span class="stamp fail">FAIL</span></span><span class="why">expected 1 draft, got 0</span></li>
-            <li class="s" style="--d:1760ms;--t:2460ms"><span class="sha">5d03c2a</span><span class="what">the fix</span><span class="status"><span class="pending">running</span><span class="stamp pass">PASS</span></span><span class="why"></span></li>
+            <li class="s" style="--d:1640ms;--t:2080ms"><span class="sha">aaaaaaa</span><span class="what">deployed</span><span class="status"><span class="pending" aria-hidden="true">running</span><span class="stamp fail">FAIL</span></span><span class="why">expected 1 draft, got 0</span></li>
+            <li class="s" style="--d:1760ms;--t:2460ms"><span class="sha">ddddddd</span><span class="what">the fix</span><span class="status"><span class="pending" aria-hidden="true">running</span><span class="stamp pass">PASS</span></span><span class="why"></span></li>
           </ul>
         </div>
       </div>
@@ -436,7 +435,7 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
   <div class="wrap">
     <div class="head">
       <h2>The CLI does the parts that must be exact. Your agent does the thinking.</h2>
-      <p class="intro">You run one command. reprobe gathers the evidence, then starts Claude Code or Codex in your repo with the case and a playbook, like <code>npx t3 triage</code>. Everything that must be exact is plain code, not a model's judgment: gathering, read-only access, redaction, citation checks and replays at old commits.</p>
+      <p class="intro">You run one command. reprobe gathers the evidence, then starts Claude Code or Codex in your repo with the case and a playbook. Everything that must be exact is plain code, not a model's judgment: gathering, read-only access, redaction, citation checks and replays at old commits.</p>
     </div>
 
     <div class="lanes" aria-hidden="true">
@@ -447,15 +446,15 @@ footer nav { height: auto; gap: 20px; display: flex; flex-wrap: wrap; }
       <li><span class="n">1</span><div class="body"><span class="lane">reprobe</span><h3>Gather the evidence</h3><p>Rows, agent traces, logs and Sentry issues for that user and time window, from Postgres, Langfuse, LangSmith, Sentry, Railway, any log CLI or log files. Each item gets a stable id. Missing sources are listed, not guessed around.</p><code class="line">npx reprobe "&lt;complaint&gt;" --since 6h</code><span class="out">Writes <code>evidence.json</code> and <code>CASE.md</code></span></div></li>
       <li class="agent"><span class="n">2</span><div class="body"><span class="lane">your agent</span><h3>Investigate</h3><p>Reads the case and the code at the deployed commit, then digs further through reprobe's read-only tools. Each answer becomes new evidence it can cite.</p><code class="line">reprobe query &lt;case&gt; "SELECT …"</code><span class="out">Adds evidence with new ids</span></div></li>
       <li class="agent"><span class="n">3</span><div class="body"><span class="lane">your agent</span><h3>Write the replay</h3><p>The smallest test of the invariant the bug broke, in your own test framework, filled with the real shapes from the evidence.</p><code class="line">&lt;case&gt;/replay.json</code><span class="out">Writes a test file and <code>replay.json</code></span></div></li>
-      <li><span class="n">4</span><div class="body"><span class="lane">reprobe</span><h3>Run it at each commit</h3><p>Each run happens in a detached worktree. You want FAIL on the deployed commit and PASS on the fix.</p><code class="line">reprobe verify &lt;case&gt; &lt;deployed-sha&gt; &lt;fix-sha&gt;</code><span class="out">FAIL, PASS or BROKEN for each commit</span></div></li>
-      <li><span class="n">5</span><div class="body"><span class="lane">reprobe</span><h3>Check every claim</h3><p>The agent writes its diagnosis. reprobe drops any claim that cites nothing, or cites an id that isn't in the evidence, and renders the rest.</p><code class="line">reprobe report &lt;case&gt;</code><span class="out">Writes <code>report.md</code></span></div></li>
+      <li><span class="n">4</span><div class="body"><span class="lane">reprobe</span><h3>Run it at each commit</h3><p>Each run happens in a detached worktree. You want FAIL on the deployed commit and PASS on the fix.</p><code class="line">reprobe verify &lt;case&gt; &lt;deployed-sha&gt; &lt;fix-sha&gt;</code><span class="out">FAIL, PASS or BROKEN; NOT-APPLICABLE if required files are missing</span></div></li>
+      <li><span class="n">5</span><div class="body"><span class="lane">reprobe</span><h3>Check every claim</h3><p>The agent writes <code>&lt;case&gt;/diagnosis.json</code>. reprobe drops any claim that cites nothing, or cites an id that isn't in the evidence, and renders the rest.</p><code class="line">reprobe report &lt;case&gt;</code><span class="out">Reads <code>diagnosis.json</code>, writes <code>report.md</code></span></div></li>
     </ol>
 
     <div class="start">
       <div><h3>Your first case</h3><p>Run these in your repo. The config stores env var names, never secret values.</p></div>
 <pre>cd your-repo
 npx reprobe init     <span class="c"># finds your sources, writes .reprobe/config.json</span>
-npx reprobe doctor   <span class="c"># checks each source with a real read</span>
+npx reprobe doctor   <span class="c"># checks configured sources and tools</span>
 npx reprobe "users can't save since this morning" --since 6h</pre>
     </div>
   </div>
@@ -465,19 +464,19 @@ npx reprobe "users can't save since this morning" --since 6h</pre>
   <div class="wrap">
     <div class="head">
       <h2>One test, run across your history.</h2>
-      <p class="intro">An explanation can sound right and still be wrong. A test that fails on the commit your users ran and passes on the fix settles it. This is a real incident with the names taken out: the first fix shipped, and the bug stayed.</p>
+      <p class="intro">An explanation can sound right and still be wrong. A test that fails on the commit your users ran and passes on the fix settles it. In this synthetic example, the first fix shipped, and the bug stayed.</p>
     </div>
     <button type="button" class="again rerun" data-replay="rail">Run the replay again</button>
     <ol class="rail" id="rail" data-reveal>
-      <li class="commit" style="--t:0ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Deployed</h3><span class="sha">e4b1907</span><p>The code users ran. The bug reproduces.</p></li>
-      <li class="commit" style="--t:650ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Before fix 1</h3><span class="sha">c02f6d1</span><p>Still fails, as expected.</p></li>
-      <li class="commit key" style="--t:1300ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Fix 1, shipped</h3><span class="sha">7a9e33b</span><p>Still fails. This is why users on the next build kept seeing the bug.</p></li>
-      <li class="commit ok" style="--t:1950ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp pass">PASS</span><h3>Fix 2</h3><span class="sha">5d03c2a</span><p>Passes. The real fix.</p></li>
+      <li class="commit" style="--t:0ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Deployed</h3><span class="sha">aaaaaaa</span><p>The code users ran. The bug reproduces.</p></li>
+      <li class="commit" style="--t:650ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Before fix 1</h3><span class="sha">bbbbbbb</span><p>Still fails, as expected.</p></li>
+      <li class="commit key" style="--t:1300ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp fail">FAIL</span><h3>Fix 1, shipped</h3><span class="sha">ccccccc</span><p>Still fails. This is why users on the next build kept seeing the bug.</p></li>
+      <li class="commit ok" style="--t:1950ms"><div class="dot"></div><i class="seg" aria-hidden="true"></i><span class="stamp pass">PASS</span><h3>Fix 2</h3><span class="sha">ddddddd</span><p>Passes. The real fix.</p></li>
     </ol>
     <dl class="legend">
       <div><dt><span class="stamp fail">FAIL</span></dt><dd>The test reached its assertion and the assertion failed. The bug reproduces.</dd></div>
       <div><dt><span class="stamp pass">PASS</span></dt><dd>The test reached its assertion and it held.</dd></div>
-      <div><dt><span class="stamp broken">BROKEN</span></dt><dd>The test never reached its assertion. A crash can't pass for a reproduced bug.</dd></div>
+      <div><dt><span class="stamp broken">BROKEN</span></dt><dd>No valid assertion verdict. A crash or invalid replay output can't prove the bug reproduces.</dd></div>
     </dl>
   </div>
 </section>
@@ -495,7 +494,7 @@ npx reprobe "users can't save since this morning" --since 6h</pre>
           <div class="layer l2">
             <div class="t"><b>Read-only session</b><code>default_transaction_read_only=on</code></div>
             <div class="layer l3">
-              <div class="t"><b>SELECT-only guard</b><code>anything else is refused</code></div>
+              <div class="t"><b>SELECT/WITH guard</b><code>anything else is refused</code></div>
               <div class="query">SELECT id, created_at FROM drafts WHERE …</div>
             </div>
           </div>
@@ -517,7 +516,7 @@ npx reprobe "users can't save since this morning" --since 6h</pre>
     <h2>Before you try it</h2>
     <div>
       <details><summary>What does it cost?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>Nothing. reprobe is MIT licensed and has no server. The investigation runs on the Claude Code or Codex you already use, so the only cost is your agent's usage.</p></details>
-      <details><summary>Does my data leave my machine?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>Evidence goes to the agent you choose, as it does when you paste logs into it today. reprobe itself sends nothing anywhere, and writes cases to <code>~/.reprobe/cases</code>, outside your repo.</p></details>
+      <details><summary>Does my data leave my machine?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>reprobe reads your configured sources directly, with no reprobe backend. Evidence goes to the agent you choose, as it does when you paste logs into it today. Cases are written to <code>~/.reprobe/cases</code>, outside your repo.</p></details>
       <details><summary>What if I don't use Postgres or Railway?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>Every source is optional. Logs can come from any CLI that prints lines (fly, vercel, kubectl, docker) or from files. Without a database, reprobe still works from traces, logs and Sentry.</p></details>
       <details><summary>What is a pack?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>One TypeScript file that teaches reprobe your product: how to find the user a complaint is about, which rows matter, your known failure signatures, and how to build an old commit. Every hook is optional.</p></details>
       <details><summary>Which agents work?<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary><p>Claude Code and Codex start automatically. With neither installed, reprobe prints one line to paste into any coding agent.</p></details>
@@ -537,22 +536,35 @@ npx reprobe "users can't save since this morning" --since 6h</pre>
 
 <script>
 const copy = document.getElementById('copy'), status = document.getElementById('copied');
-let t;
+let t, announcement;
 copy.addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(document.getElementById('cmd').textContent); }
-  catch { status.textContent = 'Copy failed. Select the command to copy it.'; return; }
-  copy.classList.add('done'); status.textContent = 'Copied';
-  clearTimeout(t); t = setTimeout(() => { copy.classList.remove('done'); status.textContent = ''; }, 1600);
+  if (copy.disabled) return;
+  clearTimeout(t); clearTimeout(announcement);
+  copy.classList.remove('done'); status.textContent = ''; copy.disabled = true;
+  try {
+    await navigator.clipboard.writeText(document.getElementById('cmd').textContent);
+    copy.classList.add('done');
+    announcement = setTimeout(() => { status.textContent = 'Copied'; }, 0);
+    t = setTimeout(() => { copy.classList.remove('done'); status.textContent = ''; }, 1600);
+  } catch {
+    announcement = setTimeout(() => { status.textContent = 'Copy failed. Select the command to copy it.'; }, 0);
+  } finally { copy.disabled = false; }
 });
 // Each staged animation plays once when it scrolls into view; "Replay" buttons restart one.
-const io = new IntersectionObserver((entries) => entries.forEach((e) => {
-  if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
-}), { threshold: 0.25, rootMargin: '0px 0px -15% 0px' });
-document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
+let io;
 document.querySelectorAll('[data-replay]').forEach((b) => b.addEventListener('click', () => {
   const el = document.getElementById(b.dataset.replay);
-  io.unobserve(el); el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
+  io?.unobserve(el); el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
 }));
+if (typeof IntersectionObserver === 'function') {
+  try {
+    io = new IntersectionObserver((entries) => entries.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    }), { threshold: 0.25, rootMargin: '0px 0px -15% 0px' });
+    document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
+    document.documentElement.classList.add('js');
+  } catch { io?.disconnect(); io = undefined; }
+}
 </script>
 </body>
 </html>
