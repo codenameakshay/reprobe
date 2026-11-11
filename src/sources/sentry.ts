@@ -89,8 +89,11 @@ export async function gatherSentry(opts: {
   if (auth.state !== 'ok') return { status: auth, evidence: [] };
   const { org: ORG, projects: PROJECTS, url } = config.sources.sentry!;
 
-  const query = opts.issue ? opts.issue : opts.userId ? `user.id:${opts.userId}` : 'is:unresolved';
+  // Issues active around the incident, not whatever is unresolved today.
   const cutoff = Date.parse(opts.window.from) - DAY_MS;
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 19);
+  const active = `firstSeen:<=${iso(Date.parse(opts.window.to))} lastSeen:>=${iso(cutoff)}`;
+  const query = opts.issue ? opts.issue : opts.userId ? `user.id:${opts.userId} ${active}` : active;
   const evidence: Evidence[] = [];
   const failures: string[] = [];
   let successfulProjects = 0;
@@ -109,14 +112,16 @@ export async function gatherSentry(opts: {
     for (const row of parseIssueTable(r.stdout, project)) {
       const ms = parseLastSeen(row.lastSeen);
       if (!opts.issue && (ms === null || ms < cutoff)) continue;
+      // Numeric issue ids look like phone numbers to redaction, so ids and links use the short id.
+      const ref = row.shortId || row.id;
       evidence.push({
-        id: `sentry:${project}:${row.id}`,
+        id: `sentry:${project}:${ref}`,
         source: 'sentry',
         at: ms === null ? null : new Date(ms).toISOString(),
         kind: 'sentry.issue',
         summary: `${row.shortId} ${row.title} (${row.status})`,
         data: row,
-        link: url ? `${url.replace(/\/+$/, '')}/issues/${row.id}/` : `https://${ORG}.sentry.io/issues/${row.id}/`,
+        link: `${url ? url.replace(/\/+$/, '') : `https://${ORG}.sentry.io`}/issues/?query=${encodeURIComponent(ref)}`,
       });
     }
   }

@@ -159,10 +159,10 @@ test('gatherSentry keeps issues seen within a day of window.from and drops older
   assert.deepEqual(out.status, { source: 'sentry', state: 'ok', detail: '1 issues' });
   assert.deepEqual(
     out.evidence.map((e) => e.id),
-    ['sentry:api:1'],
+    ['sentry:api:API-1'],
   );
   assert.deepEqual(out.evidence[0], {
-    id: 'sentry:api:1',
+    id: 'sentry:api:API-1',
     source: 'sentry',
     at: '2026-07-28T08:44:48.123Z',
     kind: 'sentry.issue',
@@ -174,7 +174,7 @@ test('gatherSentry keeps issues seen within a day of window.from and drops older
       lastSeen: '2026-07-28 08:44:48.123 UTC',
       status: 'unresolved',
     },
-    link: 'https://acme.sentry.io/issues/1/',
+    link: 'https://acme.sentry.io/issues/?query=API-1',
   });
 
   const listCalls = calls.filter((a) => a[0] === 'issues');
@@ -187,7 +187,7 @@ test('gatherSentry keeps issues seen within a day of window.from and drops older
     '-p',
     'api',
     '--query',
-    'is:unresolved',
+    'firstSeen:<=2026-07-28T12:00:00 lastSeen:>=2026-07-26T00:00:00',
     '--max-rows',
     '50',
   ]);
@@ -232,7 +232,7 @@ test('gatherSentry links issues to sentry.url when the config sets it', async ()
     ? { stdout: tableOf([['1', 'API-1', 'Recent crash', 'unresolved', '2026-07-28 08:44:48.123 UTC']]) }
     : { stdout: tableOf([]) }));
   const out = await gatherSentry({ window: WINDOW, runner });
-  assert.equal(out.evidence[0].link, 'https://sentry.example.com/issues/1/');
+  assert.equal(out.evidence[0].link, 'https://sentry.example.com/issues/?query=API-1');
 });
 
 test('gatherSentry passes an explicit issue id through as the query and skips the window filter', async () => {
@@ -251,7 +251,7 @@ test('gatherSentry passes an explicit issue id through as the query and skips th
 
   assert.deepEqual(
     out.evidence.map((e) => e.id),
-    ['sentry:api:2'],
+    ['sentry:api:API-2'],
   );
   const listCalls = calls.filter((a) => a[0] === 'issues');
   assert.equal(listCalls.length, 2);
@@ -264,7 +264,7 @@ test('gatherSentry builds a user.id query when given a userId', async () => {
   await gatherSentry({ window: WINDOW, userId: '42', runner });
   const listCalls = calls.filter((a) => a[0] === 'issues');
   assert.equal(listCalls.length, 2);
-  for (const args of listCalls) assert.equal(queryOf(args), 'user.id:42');
+  for (const args of listCalls) assert.equal(queryOf(args), 'user.id:42 firstSeen:<=2026-07-28T12:00:00 lastSeen:>=2026-07-26T00:00:00');
 });
 
 test('gatherSentry reports empty when no issues match', async () => {
@@ -295,4 +295,21 @@ test('gatherSentry redacts credential-shaped command errors', async () => {
   const out = await gatherSentry({ window: WINDOW, runner });
   assert.equal(out.status.state, 'error');
   assert.doesNotMatch(out.status.detail, /sntryu_123456789abcdef/);
+});
+
+test('gatherSentry: a 10-digit numeric issue id survives redaction because ids and links use the short id', async () => {
+  setConfig(buildConfig(null, { sources: { sentry: { org: 'acme', projects: ['api'] } } }));
+  const table = [
+    '+------------+------------+-------+-----------------------------+------------+-------+',
+    '| Issue ID   | Short ID   | Title | Last seen                   | Status     | Level |',
+    '+------------+------------+-------+-----------------------------+------------+-------+',
+    '| 7702017587 | API-1T     | Boom  | 2026-07-28T08:44:48.000000Z | unresolved | error |',
+    '| 7808853152 | API-21     | Bang  | 2026-07-28T08:45:48.000000Z | unresolved | error |',
+    '+------------+------------+-------+-----------------------------+------------+-------+',
+  ].join('\n');
+  const runner: Runner = async (_cmd, args) => (args[0] === 'info' ? { code: 0, stdout: 'Method: Auth Token', stderr: '' } : { code: 0, stdout: table, stderr: '' });
+  const { redactValue } = await import('../src/redact.ts');
+  const r = redactValue(await gatherSentry({ window: { from: '2026-07-28T08:00:00.000Z', to: '2026-07-28T09:00:00.000Z' }, runner }));
+  assert.deepEqual(r.evidence.map((e) => e.id), ['sentry:api:API-1T', 'sentry:api:API-21']);
+  assert.ok(r.evidence.every((e) => !e.link?.includes('[phone]')));
 });
